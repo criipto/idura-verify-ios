@@ -1,0 +1,10 @@
+disabled_rules:
+  - trailing_comma
+
+included:
+  - Sources
+  - Example
+  - Package.swift
+  
+opening_brace:
+  ignore_multiline_type_headers: true
