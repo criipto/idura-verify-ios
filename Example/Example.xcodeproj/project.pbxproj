@@ -7,16 +7,27 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		2741483D5975A1CFD4701CDC /* LoadingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6790E166E81144820EAC6B6F /* LoadingView.swift */; };
 		85832E9EB068A8B91FE8D8CF /* IduraVerify in Frameworks */ = {isa = PBXBuildFile; productRef = A7B18073CA4650FCA1A2735B /* IduraVerify */; };
 		AC0E5F01EC2958CBACAD8C22 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 9351729A4E35979B7CDBD831 /* Assets.xcassets */; };
+		C5533E2A985D8011FE7BAC45 /* LoginState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7636D35C05F49F68A9810569 /* LoginState.swift */; };
+		CB3D10F83A2C7DEBDAA01D82 /* UnAuthenticatedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81E5F2709BB22228A02ED37B /* UnAuthenticatedView.swift */; };
+		CB927384BBBCA61B54AB9AB5 /* AuthenticatedView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACDD34D9523EEE2472F489B5 /* AuthenticatedView.swift */; };
 		D7E5FA3F45609DCF2396236C /* ExampleApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E8FF7A429ADA70844033BC5 /* ExampleApp.swift */; };
-		D8B7DE28D8BAB0A34446BD35 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF55CA393A27DA262FAA5AA8 /* ContentView.swift */; };
+		E6805AAA7EDBBD15B5E2409E /* MainView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3CAFDE38FF095144CB2EF25 /* MainView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		2E8FF7A429ADA70844033BC5 /* ExampleApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExampleApp.swift; sourceTree = "<group>"; };
+		6790E166E81144820EAC6B6F /* LoadingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoadingView.swift; sourceTree = "<group>"; };
+		6FC3B93D5349EE4B84CA135C /* Example.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Example.entitlements; sourceTree = "<group>"; };
+		7636D35C05F49F68A9810569 /* LoginState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginState.swift; sourceTree = "<group>"; };
+		81E5F2709BB22228A02ED37B /* UnAuthenticatedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnAuthenticatedView.swift; sourceTree = "<group>"; };
 		9351729A4E35979B7CDBD831 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		AF55CA393A27DA262FAA5AA8 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		A70CCE019BA3AE518E7FE7F3 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		ACDD34D9523EEE2472F489B5 /* AuthenticatedView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthenticatedView.swift; sourceTree = "<group>"; };
+		B3CAFDE38FF095144CB2EF25 /* MainView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainView.swift; sourceTree = "<group>"; };
+		CAEC65A6DFAEFDDFFFECF741 /* config.xxconfig */ = {isa = PBXFileReference; path = config.xxconfig; sourceTree = "<group>"; };
 		E8EF3FCBB93470B40AD9FAD1 /* idura-verify-ios */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "idura-verify-ios"; path = ..; sourceTree = SOURCE_ROOT; };
 		F6FE7BF0248FC2FF22A10D63 /* Example.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Example.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -53,8 +64,11 @@
 			isa = PBXGroup;
 			children = (
 				9351729A4E35979B7CDBD831 /* Assets.xcassets */,
-				AF55CA393A27DA262FAA5AA8 /* ContentView.swift */,
+				6FC3B93D5349EE4B84CA135C /* Example.entitlements */,
 				2E8FF7A429ADA70844033BC5 /* ExampleApp.swift */,
+				A70CCE019BA3AE518E7FE7F3 /* Info.plist */,
+				7636D35C05F49F68A9810569 /* LoginState.swift */,
+				8A8F132EE40CA7240C9571C4 /* Views */,
 			);
 			path = Example;
 			sourceTree = "<group>";
@@ -62,10 +76,30 @@
 		54E0667A38E60354DB90F776 = {
 			isa = PBXGroup;
 			children = (
+				BACF23C4FB4D806D1D1C7E4A /* Configs */,
 				4F160DA0426D18FD4DFD3610 /* Example */,
 				12B9A666C278AB8CB5B6FA33 /* Packages */,
 				3031F8ABC084F8D43CC56342 /* Products */,
 			);
+			sourceTree = "<group>";
+		};
+		8A8F132EE40CA7240C9571C4 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				ACDD34D9523EEE2472F489B5 /* AuthenticatedView.swift */,
+				6790E166E81144820EAC6B6F /* LoadingView.swift */,
+				B3CAFDE38FF095144CB2EF25 /* MainView.swift */,
+				81E5F2709BB22228A02ED37B /* UnAuthenticatedView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		BACF23C4FB4D806D1D1C7E4A /* Configs */ = {
+			isa = PBXGroup;
+			children = (
+				CAEC65A6DFAEFDDFFFECF741 /* config.xxconfig */,
+			);
+			path = Configs;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -138,8 +172,12 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				D8B7DE28D8BAB0A34446BD35 /* ContentView.swift in Sources */,
+				CB927384BBBCA61B54AB9AB5 /* AuthenticatedView.swift in Sources */,
 				D7E5FA3F45609DCF2396236C /* ExampleApp.swift in Sources */,
+				2741483D5975A1CFD4701CDC /* LoadingView.swift in Sources */,
+				C5533E2A985D8011FE7BAC45 /* LoginState.swift in Sources */,
+				E6805AAA7EDBBD15B5E2409E /* MainView.swift in Sources */,
+				CB3D10F83A2C7DEBDAA01D82 /* UnAuthenticatedView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -205,12 +243,12 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Example/Example.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "Idura Verify Example";
+				INFOPLIST_FILE = Example/Info.plist;
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -227,14 +265,15 @@
 		};
 		6F2752D853BD4392F414E20B /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = CAEC65A6DFAEFDDFFFECF741 /* config.xxconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Example/Example.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "Idura Verify Example";
+				INFOPLIST_FILE = Example/Info.plist;
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
