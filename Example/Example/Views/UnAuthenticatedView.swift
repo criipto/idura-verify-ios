@@ -9,6 +9,10 @@ extension View {
   }
 }
 
+struct MockData: Codable {
+  var name: String
+}
+
 struct UnAuthenticatedView: View {
   @Binding var loginState: LoginState
   var iduraVerify: IduraVerify
@@ -22,25 +26,30 @@ struct UnAuthenticatedView: View {
         Text(errorMessage ?? "")
           .font(.title)
         Button(
-          action: { login(eid: .mock) },
+          // swiftlint:disable:next force_try
+          action: { login(eid: try! Mock().withMockData(MockData(name: "Foobar"))) },
           label: {
             Text("Login with Mock")
           },
         ).padding()
         Button(
-          action: { login(eid: .mitID) },
+          action: {
+            login(
+              eid: DanishMitID.substantial().withAction(.sign).withMessage(
+                "hello there!"))
+          },
           label: {
             Text("Login with MitID")
           },
         ).padding()
         Button(
-          action: { login(eid: .seBankID) },
+          action: { login(eid: SwedishBankID.sameDevice().withMessage("Hello!")) },
           label: {
             Text("Login with SE BankID")
           },
         ).padding()
         Button(
-          action: { login(eid: .noBankID) },
+          action: { login(eid: NorwegianBankID.high().withSsn()) },
           label: {
             Text("Login with NO BankID")
           },
@@ -63,7 +72,7 @@ struct UnAuthenticatedView: View {
     }
   }
 
-  func login(eid: EID) {
+  func login<T>(eid: EID<T>) {
     guard
       case .notLoggedIn(
         _, let previouslyLoggedInAs,

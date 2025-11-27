@@ -29,6 +29,10 @@ let package = Package(
         .product(name: "AppAuth", package: "AppAuth-ios"),
         .product(name: "JWTKit", package: "jwt-kit"),
       ],
-    )
+    ),
+    .testTarget(
+      name: "IduraVerifyTests",
+      dependencies: ["IduraVerify"]
+    ),
   ],
 )
