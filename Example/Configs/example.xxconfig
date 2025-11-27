@@ -1,0 +1,6 @@
+# Copy to config.xxconfig
+
+IDURA_DOMAIN = Your Idura domain
+IDURA_CLIENT_ID = Your Idura client ID 
+
+DEVELOPMENT_TEAM = Your apple development team

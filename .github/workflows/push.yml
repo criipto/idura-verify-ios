@@ -1,0 +1,28 @@
+on: push
+
+# Replace old runs in the same group
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: macos-latest
+    steps:
+      - uses: swift-actions/setup-swift@v2
+        with:
+          swift-version: "6.2"
+      - uses: actions/checkout@v5
+      - name: Cache Swift Package Manager
+        uses: actions/cache@v4
+        with:
+          path: |
+            .build
+            ~/Library/Developer/Xcode/DerivedData/ModuleCache.noindex
+            ~/Library/Caches/org.swift.swiftpm
+            ~/Library/org.swift.swiftpm  # Don't forget this!
+          key: ${{ runner.os }}-spm-${{ hashFiles('**/Package.resolved') }}
+      - name: Check formatting
+        run: swift format lint . -r -s
+      - name: Lint
+        run: swift package plugin --allow-writing-to-package-directory swiftlint lint

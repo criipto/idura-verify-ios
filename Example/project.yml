@@ -1,0 +1,36 @@
+name: Example
+groups:
+  - Configs
+options:
+  bundleIdPrefix: eu.idura
+usesTabs: false
+identWidth: 2
+packages:
+  IduraVerify:
+    path: ..
+targets:
+  Example:
+    configFiles:
+      Debug: Configs/config.xxconfig
+    type: application
+    supportedDestinations: [iOS]
+    sources: [Example]
+    dependencies:
+      - package: IduraVerify
+    entitlements:
+      path: Example/Example.entitlements
+      properties:
+        com.apple.developer.associated-domains:
+          - webcredentials:$(IDURA_DOMAIN)
+          - applinks:$(IDURA_DOMAIN)
+    info:
+      path: Example/Info.plist
+      properties:
+        CFBundleDisplayName: "Idura Verify Example"
+        IDURA_DOMAIN: $(IDURA_DOMAIN)
+        IDURA_CLIENT_ID: $(IDURA_CLIENT_ID)
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]: YES
