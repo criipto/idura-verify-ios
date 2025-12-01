@@ -18,7 +18,7 @@ struct UnAuthenticatedView: View {
   var iduraVerify: IduraVerify
 
   var body: some View {
-    if case .notLoggedIn(let errorMessage, _) = loginState {
+    if case .notLoggedIn(let errorMessage, let previouslyLoggedInAs) = loginState {
       VStack {
         Image(systemName: "lock")
           .imageScale(.large)
@@ -34,9 +34,12 @@ struct UnAuthenticatedView: View {
         ).padding()
         Button(
           action: {
-            login(
-              eid: DanishMitID.substantial().withAction(.sign).withMessage(
-                "hello there!"))
+            var mitID = DanishMitID.substantial().withAction(.sign).withMessage("hello there!")
+
+            if let previouslyLoggedInAs {
+              mitID = mitID.prefillUUID(previouslyLoggedInAs)
+            }
+            login(eid: mitID)
           },
           label: {
             Text("Login with MitID")
@@ -73,21 +76,12 @@ struct UnAuthenticatedView: View {
   }
 
   func login<T>(eid: EID<T>) {
-    guard
-      case .notLoggedIn(
-        _, let previouslyLoggedInAs,
-      ) = loginState
-    else {
-      return
-    }
-
     Task {
       do {
         loginState = .loading
         let (idToken, claims) = try await iduraVerify.login(
           presenting: getViewController(),
           eid: eid,
-          previouslyLoggedInAs: previouslyLoggedInAs,
         )
         loginState = .loggedIn(idToken: idToken, claims: claims)
       } catch {

@@ -44,7 +44,6 @@ public class IduraVerify: @unchecked Sendable {
   public func login<T>(
     presenting: UIViewController,
     eid: EID<T>,
-    previouslyLoggedInAs: String?,
   ) async throws -> (String, IDTokenClaims) {
     try await ensurePrepared()
 
@@ -67,11 +66,6 @@ public class IduraVerify: @unchecked Sendable {
       loginHints.append("appswitch:ios")
       if appSwitchUri != nil {
         loginHints.append("appswitch:resumeUrl:\(appSwitchUri!)")
-      }
-      if previouslyLoggedInAs != nil {
-        // If a user has been logged in before, MitID supports skipping the username input
-        // step.
-        loginHints.append("uuid:\(previouslyLoggedInAs!)")
       }
     }
 
