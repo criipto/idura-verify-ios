@@ -18,6 +18,13 @@ public struct IDTokenClaims: JWTPayload {
   }
 }
 
+public enum Prompt: String {
+  case login = "login"
+  case none = "none"
+  case consent = "consent"
+  case consentRevoke = "consent_revoke"
+}
+
 public class IduraVerify: @unchecked Sendable {
   let logger = Logger(subsystem: "eu.idura.loginexample", category: "LoginManager")
 
@@ -44,6 +51,7 @@ public class IduraVerify: @unchecked Sendable {
   public func login<T>(
     presenting: UIViewController,
     eid: EID<T>,
+    prompt: Prompt? = .login
   ) async throws -> (String, IDTokenClaims) {
     try await ensurePrepared()
 
@@ -58,6 +66,10 @@ public class IduraVerify: @unchecked Sendable {
     var extraParams = [String: String]()
 
     extraParams["acr_values"] = eid.acrValue
+
+    if let prompt {
+      extraParams["prompt"] = prompt.rawValue
+    }
 
     if let action = eid.action {
       loginHints.append("action:\(action.rawValue.lowercased())")
