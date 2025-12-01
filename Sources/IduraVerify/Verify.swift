@@ -4,13 +4,6 @@ import JWTKit
 import SwiftUI
 import os
 
-public enum EID: String {
-  case mitID = "urn:grn:authn:dk:mitid:substantial"
-  case seBankID = "urn:grn:authn:se:bankid"
-  case noBankID = "urn:grn:authn:no:bankid:substantial"
-  case mock = "urn:grn:authn:mock"
-}
-
 public struct IDTokenClaims: JWTPayload {
   public var sub: String
   public var name: String?
@@ -23,6 +16,13 @@ public struct IDTokenClaims: JWTPayload {
     try exp.verifyNotExpired(
       currentDate: Calendar.current.date(byAdding: .minute, value: 5, to: Date())!)
   }
+}
+
+public enum Prompt: String {
+  case login = "login"
+  case none = "none"
+  case consent = "consent"
+  case consentRevoke = "consent_revoke"
 }
 
 public class IduraVerify: @unchecked Sendable {
@@ -48,10 +48,10 @@ public class IduraVerify: @unchecked Sendable {
   }
 
   private var currentAuthorizationSession: OIDExternalUserAgentSession?
-  public func login(
+  public func login<T>(
     presenting: UIViewController,
-    eid: EID,
-    previouslyLoggedInAs: String?,
+    eid: EID<T>,
+    prompt: Prompt? = .login
   ) async throws -> (String, IDTokenClaims) {
     try await ensurePrepared()
 
@@ -60,21 +60,25 @@ public class IduraVerify: @unchecked Sendable {
       self.currentAuthorizationSession?.cancel()
     }
 
-    logger.log("Starting login flow for \(eid.rawValue)")
+    logger.log("Starting login flow for \(eid.acrValue)")
 
-    var loginHints = [String]()
+    var loginHints = [] + eid.loginHints
     var extraParams = [String: String]()
 
-    extraParams["acr_values"] = eid.rawValue
+    extraParams["acr_values"] = eid.acrValue
 
-    loginHints.append("appswitch:ios")
-    if appSwitchUri != nil {
-      loginHints.append("appswitch:resumeUrl:\(appSwitchUri!)")
+    if let prompt {
+      extraParams["prompt"] = prompt.rawValue
     }
-    if eid == .mitID, previouslyLoggedInAs != nil {
-      // If a user has been logged in before, MitID supports skipping the username input
-      // step.
-      loginHints.append("uuid:\(previouslyLoggedInAs!)")
+
+    if let action = eid.action {
+      loginHints.append("action:\(action.rawValue.lowercased())")
+    }
+    if eid is DanishMitID {
+      loginHints.append("appswitch:ios")
+      if appSwitchUri != nil {
+        loginHints.append("appswitch:resumeUrl:\(appSwitchUri!)")
+      }
     }
 
     extraParams["login_hint"] = loginHints.joined(separator: " ")
@@ -83,7 +87,7 @@ public class IduraVerify: @unchecked Sendable {
       configuration: iduraServiceConfiguration!,
       clientId: clientId,
       clientSecret: nil,
-      scopes: [OIDScopeOpenID],
+      scopes: [OIDScopeOpenID] + eid.scopes,
       redirectURL: redirectUri,
       responseType: OIDResponseTypeCode,
       additionalParameters: extraParams,

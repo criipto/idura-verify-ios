@@ -9,12 +9,16 @@ extension View {
   }
 }
 
+struct MockData: Codable {
+  var name: String
+}
+
 struct UnAuthenticatedView: View {
   @Binding var loginState: LoginState
   var iduraVerify: IduraVerify
 
   var body: some View {
-    if case .notLoggedIn(let errorMessage, _) = loginState {
+    if case .notLoggedIn(let errorMessage, let previouslyLoggedInAs) = loginState {
       VStack {
         Image(systemName: "lock")
           .imageScale(.large)
@@ -22,25 +26,33 @@ struct UnAuthenticatedView: View {
         Text(errorMessage ?? "")
           .font(.title)
         Button(
-          action: { login(eid: .mock) },
+          // swiftlint:disable:next force_try
+          action: { login(eid: try! Mock().withMockData(MockData(name: "Foobar"))) },
           label: {
             Text("Login with Mock")
           },
         ).padding()
         Button(
-          action: { login(eid: .mitID) },
+          action: {
+            var mitID = DanishMitID.substantial().withAction(.sign).withMessage("hello there!")
+
+            if let previouslyLoggedInAs {
+              mitID = mitID.prefillUUID(previouslyLoggedInAs)
+            }
+            login(eid: mitID)
+          },
           label: {
             Text("Login with MitID")
           },
         ).padding()
         Button(
-          action: { login(eid: .seBankID) },
+          action: { login(eid: SwedishBankID.sameDevice().withMessage("Hello!")) },
           label: {
             Text("Login with SE BankID")
           },
         ).padding()
         Button(
-          action: { login(eid: .noBankID) },
+          action: { login(eid: NorwegianBankID.high().withSsn()) },
           label: {
             Text("Login with NO BankID")
           },
@@ -63,22 +75,13 @@ struct UnAuthenticatedView: View {
     }
   }
 
-  func login(eid: EID) {
-    guard
-      case .notLoggedIn(
-        _, let previouslyLoggedInAs,
-      ) = loginState
-    else {
-      return
-    }
-
+  func login<T>(eid: EID<T>) {
     Task {
       do {
         loginState = .loading
         let (idToken, claims) = try await iduraVerify.login(
           presenting: getViewController(),
           eid: eid,
-          previouslyLoggedInAs: previouslyLoggedInAs,
         )
         loginState = .loggedIn(idToken: idToken, claims: claims)
       } catch {
