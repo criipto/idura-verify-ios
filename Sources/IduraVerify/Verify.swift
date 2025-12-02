@@ -72,7 +72,7 @@ public class IduraVerify: @unchecked Sendable {
   let useEphemeralBrowserSession = true
 
   public init(clientId: String, domain: String) {
-    self.domain = URL(string: domain)!
+    self.domain = URL(string: "https://" + domain)!
     redirectUri = self.domain.appendingPathComponent("/ios/callback")
     appSwitchUri = self.domain.appendingPathComponent("/ios/callback/appswitch")
     self.clientId = clientId
