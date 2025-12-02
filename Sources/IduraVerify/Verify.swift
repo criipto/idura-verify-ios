@@ -78,18 +78,12 @@ public class IduraVerify: @unchecked Sendable {
     self.clientId = clientId
   }
 
-  private var currentAuthorizationSession: OIDExternalUserAgentSession?
   public func login<T>(
     presenting: UIViewController,
     eid: EID<T>,
     prompt: Prompt? = .login
   ) async throws -> (String, IDTokenClaims) {
     try await ensurePrepared()
-
-    Task {
-      @MainActor in
-      self.currentAuthorizationSession?.cancel()
-    }
 
     logger.log("Starting login flow for \(eid.acrValue)")
 
@@ -129,31 +123,39 @@ public class IduraVerify: @unchecked Sendable {
     )
 
     let parRequest = try await pushAuthorizationRequest(authorizationRequest)
-    let authState = try await Task {
+    let codeResponse = try await Task {
       // This is the code that presents the browser to the user, so it needs to run on the
       // main thread
       @MainActor in
       return try await withCheckedThrowingContinuation { continuation in
-        self.currentAuthorizationSession =
-          OIDAuthState.authState(
-            byPresenting: parRequest,
-            externalUserAgent: ASWebAuthenticationUserAgent(
-              presenting: presenting,
-              redirectUri: self.redirectUri,
-              useEphemeralBrowserSession: self.useEphemeralBrowserSession,
-            ),
-          ) { authState, error in
-            if let authState {
-              continuation.resume(returning: authState)
-            } else {
-              continuation.resume(throwing: error!)
-            }
+        OIDAuthorizationService.present(
+          parRequest,
+          externalUserAgent: ASWebAuthenticationUserAgent(
+            presenting: presenting,
+            redirectUri: self.redirectUri,
+            useEphemeralBrowserSession: self.useEphemeralBrowserSession,
+          )
+        ) { response, error in
+          if let response {
+            continuation.resume(returning: response)
+          } else if let error {
+            continuation.resume(throwing: error)
           }
+        }
       }
     }.value
-    currentAuthorizationSession = nil
 
-    let idToken = authState.lastTokenResponse!.idToken!
+    let tokenResponse = try await withCheckedThrowingContinuation { continuation in
+      OIDAuthorizationService.perform(codeResponse.tokenExchangeRequest()!) { response, error in
+        if let response {
+          continuation.resume(returning: response)
+        } else if let error {
+          continuation.resume(throwing: error)
+        }
+      }
+    }
+
+    let idToken = tokenResponse.idToken!
     logger.debug("Got ID Token: \(idToken)")
     let claims = try await iduraJwks!.verify(
       idToken,
@@ -216,7 +218,7 @@ public class IduraVerify: @unchecked Sendable {
     try await withCheckedThrowingContinuation { continuation in
       Task {
         @MainActor in
-        self.currentAuthorizationSession = OIDAuthorizationService.present(
+        OIDAuthorizationService.present(
           request,
           externalUserAgent: ASWebAuthenticationUserAgent(
             presenting: presenting,
@@ -232,7 +234,6 @@ public class IduraVerify: @unchecked Sendable {
         }
       }
     }
-    currentAuthorizationSession = nil
   }
 
   /// Prepare the login manager by loading Idura OIDC configuration and JWK keyset.
