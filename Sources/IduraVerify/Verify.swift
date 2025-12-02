@@ -4,6 +4,10 @@ import JWTKit
 import SwiftUI
 import os
 
+public enum IduraVerifyErrors: Error {
+  case parInitializationError
+}
+
 public struct IDTokenClaims: JWTPayload {
   public var sub: String
   public var name: String?
@@ -23,6 +27,33 @@ public enum Prompt: String {
   case none = "none"
   case consent = "consent"
   case consentRevoke = "consent_revoke"
+}
+
+private class PARRequest: OIDAuthorizationRequest {
+  var parRequestUri: URL?
+  init(request: OIDAuthorizationRequest, parRequestUri: URL) {
+    super.init(
+      configuration: request.configuration,
+      clientId: request.clientID,
+      clientSecret: nil,
+      scope: request.scope,
+      redirectURL: request.redirectURL!,
+      responseType: request.responseType,
+      state: request.state,
+      nonce: request.nonce,
+      codeVerifier: request.codeVerifier,
+      codeChallenge: request.codeChallenge,
+      codeChallengeMethod: request.codeChallengeMethod,
+      additionalParameters: request.additionalParameters,
+    )
+    self.parRequestUri = parRequestUri
+  }
+  required init?(coder: NSCoder) {
+    super.init(coder: coder)
+  }
+  override func externalUserAgentRequestURL() -> URL {
+    return parRequestUri!
+  }
 }
 
 public class IduraVerify: @unchecked Sendable {
@@ -83,7 +114,7 @@ public class IduraVerify: @unchecked Sendable {
 
     extraParams["login_hint"] = loginHints.joined(separator: " ")
 
-    let request = OIDAuthorizationRequest(
+    let authorizationRequest = OIDAuthorizationRequest(
       configuration: iduraServiceConfiguration!,
       clientId: clientId,
       clientSecret: nil,
@@ -94,17 +125,18 @@ public class IduraVerify: @unchecked Sendable {
     )
 
     logger.debug(
-      "Starting external authentication flow with URL: \(request.authorizationRequestURL())",
+      "Starting external authentication flow with URL: \(authorizationRequest.authorizationRequestURL())",
     )
 
-    let authState = try await withCheckedThrowingContinuation { continuation in
-      Task {
-        // This is the code that presents the browser to the user, so it needs to run on the
-        // main thread
-        @MainActor in
+    let parRequest = try await pushAuthorizationRequest(authorizationRequest)
+    let authState = try await Task {
+      // This is the code that presents the browser to the user, so it needs to run on the
+      // main thread
+      @MainActor in
+      return try await withCheckedThrowingContinuation { continuation in
         self.currentAuthorizationSession =
           OIDAuthState.authState(
-            byPresenting: request,
+            byPresenting: parRequest,
             externalUserAgent: ASWebAuthenticationUserAgent(
               presenting: presenting,
               redirectUri: self.redirectUri,
@@ -118,7 +150,7 @@ public class IduraVerify: @unchecked Sendable {
             }
           }
       }
-    }
+    }.value
     currentAuthorizationSession = nil
 
     let idToken = authState.lastTokenResponse!.idToken!
@@ -129,6 +161,43 @@ public class IduraVerify: @unchecked Sendable {
     )
 
     return (idToken, claims)
+  }
+
+  private func pushAuthorizationRequest(_ authorizationRequest: OIDAuthorizationRequest)
+    async throws
+    -> PARRequest
+  {
+    let parEndpoint = URL(
+      string: iduraServiceConfiguration!.discoveryDocument!.discoveryDictionary[
+        // We know the par endpoint will be defined
+        // swiftlint:disable:next force_cast
+        "pushed_authorization_request_endpoint"] as! String)!
+
+    var parInitializationRequest = URLRequest(url: parEndpoint)
+    parInitializationRequest.httpMethod = "POST"
+    parInitializationRequest.httpBody = URLComponents(
+      url: authorizationRequest.authorizationRequestURL(), resolvingAgainstBaseURL: false)?.query?
+      .data(using: .utf8)
+
+    let (data, response) = try await URLSession.shared.data(for: parInitializationRequest)
+    if (response as? HTTPURLResponse)?.statusCode != 201 {
+      throw IduraVerifyErrors.parInitializationError
+    }
+
+    struct ParResponse: Decodable {
+      let requestUri: String
+    }
+    let decoder = JSONDecoder()
+    decoder.keyDecodingStrategy = .convertFromSnakeCase
+    let parResponse = try decoder.decode(ParResponse.self, from: data)
+
+    var urlBuilder = URLComponents(
+      url: iduraServiceConfiguration!.authorizationEndpoint, resolvingAgainstBaseURL: false)!
+    urlBuilder.queryItems = [
+      URLQueryItem(name: "client_id", value: clientId),
+      URLQueryItem(name: "request_uri", value: parResponse.requestUri),
+    ]
+    return PARRequest(request: authorizationRequest, parRequestUri: urlBuilder.url!)
   }
 
   public func logout(
