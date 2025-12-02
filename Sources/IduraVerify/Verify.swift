@@ -29,7 +29,7 @@ public enum Prompt: String {
   case consentRevoke = "consent_revoke"
 }
 
-private class PARRequest: OIDAuthorizationRequest {
+private class PARRequest: OIDAuthorizationRequest, @unchecked Sendable {
   var parRequestUri: URL?
   init(request: OIDAuthorizationRequest, parRequestUri: URL) {
     super.init(
@@ -123,13 +123,21 @@ public class IduraVerify: @unchecked Sendable {
     )
 
     let parRequest = try await pushAuthorizationRequest(authorizationRequest)
-    let codeResponse = try await Task {
+    let codeResponse = try await launchBrowser(presenting: presenting, request: parRequest)
+
+    return try await exchanceCode(codeResponse: codeResponse)
+  }
+
+  private func launchBrowser(presenting: UIViewController, request: PARRequest) async throws
+    -> OIDAuthorizationResponse
+  {
+    return try await Task {
       // This is the code that presents the browser to the user, so it needs to run on the
       // main thread
       @MainActor in
       return try await withCheckedThrowingContinuation { continuation in
         OIDAuthorizationService.present(
-          parRequest,
+          request,
           externalUserAgent: ASWebAuthenticationUserAgent(
             presenting: presenting,
             redirectUri: self.redirectUri,
@@ -144,7 +152,11 @@ public class IduraVerify: @unchecked Sendable {
         }
       }
     }.value
+  }
 
+  private func exchanceCode(codeResponse: OIDAuthorizationResponse) async throws -> (
+    String, IDTokenClaims
+  ) {
     let tokenResponse = try await withCheckedThrowingContinuation { continuation in
       OIDAuthorizationService.perform(codeResponse.tokenExchangeRequest()!) { response, error in
         if let response {
