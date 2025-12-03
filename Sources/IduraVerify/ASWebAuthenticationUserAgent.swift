@@ -13,13 +13,18 @@ class ASWebAuthenticationUserAgent: NSObject, @preconcurrency OIDExternalUserAge
   private let presenting: UIViewController
   private let redirectUri: URL
   private let useEphemeralBrowserSession: Bool
+  private let headers: [String: String]?
 
   private var webAuth: ASWebAuthenticationSession?
 
-  init(presenting: UIViewController, redirectUri: URL, useEphemeralBrowserSession: Bool) {
+  init(
+    presenting: UIViewController, redirectUri: URL, useEphemeralBrowserSession: Bool,
+    headers: [String: String]? = nil
+  ) {
     self.presenting = presenting
     self.redirectUri = redirectUri
     self.useEphemeralBrowserSession = useEphemeralBrowserSession
+    self.headers = headers
   }
 
   func present(
@@ -43,6 +48,9 @@ class ASWebAuthenticationUserAgent: NSObject, @preconcurrency OIDExternalUserAge
 
     webAuth.prefersEphemeralWebBrowserSession = useEphemeralBrowserSession
     webAuth.presentationContextProvider = self
+    if let headers {
+      webAuth.additionalHeaderFields = headers
+    }
 
     return webAuth.start()
   }

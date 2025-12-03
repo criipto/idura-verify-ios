@@ -11,7 +11,7 @@ struct MainView: View {
       // swiftlint:disable:next force_cast
       clientId: (Bundle.main.object(forInfoDictionaryKey: "IDURA_CLIENT_ID") as! String),
       // swiftlint:disable:next force_cast
-      domain: "https://" + (Bundle.main.object(forInfoDictionaryKey: "IDURA_DOMAIN") as! String),
+      domain: Bundle.main.object(forInfoDictionaryKey: "IDURA_DOMAIN") as! String,
     )
   }
 

@@ -1,8 +1,13 @@
 @preconcurrency internal import AppAuth
 @preconcurrency internal import AppAuthCore
 import JWTKit
+@preconcurrency import OpenTelemetryApi
+import OpenTelemetryConcurrency
 import SwiftUI
 import os
+
+// TODO: remember to update this when pushing a new version!
+private let version = "0.0.1"
 
 public enum IduraVerifyErrors: Error {
   case parInitializationError
@@ -29,7 +34,7 @@ public enum Prompt: String {
   case consentRevoke = "consent_revoke"
 }
 
-private class PARRequest: OIDAuthorizationRequest {
+private class PARRequest: OIDAuthorizationRequest, @unchecked Sendable {
   var parRequestUri: URL?
   init(request: OIDAuthorizationRequest, parRequestUri: URL) {
     super.init(
@@ -58,6 +63,8 @@ private class PARRequest: OIDAuthorizationRequest {
 
 public class IduraVerify: @unchecked Sendable {
   let logger = Logger(subsystem: "eu.idura.loginexample", category: "LoginManager")
+  let tracer: Tracer
+  let propagator: TextMapPropagator
 
   var prepared = false
   /// A JSON Web Key Set (JWKS), containing the public keys used to verify that the obtained JWT
@@ -72,98 +79,139 @@ public class IduraVerify: @unchecked Sendable {
   let useEphemeralBrowserSession = true
 
   public init(clientId: String, domain: String) {
-    self.domain = URL(string: domain)!
+    let (tracerProvider, propagator) = initTelemetry(serverAddress: domain, version: version)
+    self.propagator = propagator
+    tracer = tracerProvider.get(
+      instrumentationName: "idura-verify", instrumentationVersion: version)
+
+    self.domain = URL(string: "https://" + domain)!
     redirectUri = self.domain.appendingPathComponent("/ios/callback")
     appSwitchUri = self.domain.appendingPathComponent("/ios/callback/appswitch")
     self.clientId = clientId
   }
 
-  private var currentAuthorizationSession: OIDExternalUserAgentSession?
   public func login<T>(
     presenting: UIViewController,
     eid: EID<T>,
     prompt: Prompt? = .login
   ) async throws -> (String, IDTokenClaims) {
-    try await ensurePrepared()
+    return try await tracer.spanBuilder(spanName: "ios sdk login").setNoParent().setAttribute(
+      key: "acr_value", value: eid.acrValue
+    ).runWithSpan { span in
+      try await ensurePrepared()
 
-    Task {
-      @MainActor in
-      self.currentAuthorizationSession?.cancel()
-    }
+      logger.log(
+        "Starting login flow for \(eid.acrValue), traceId \(span.context.traceId.hexString)")
 
-    logger.log("Starting login flow for \(eid.acrValue)")
+      var loginHints = [] + eid.loginHints
+      var extraParams = [String: String]()
 
-    var loginHints = [] + eid.loginHints
-    var extraParams = [String: String]()
+      extraParams["acr_values"] = eid.acrValue
 
-    extraParams["acr_values"] = eid.acrValue
-
-    if let prompt {
-      extraParams["prompt"] = prompt.rawValue
-    }
-
-    if let action = eid.action {
-      loginHints.append("action:\(action.rawValue.lowercased())")
-    }
-    if eid is DanishMitID {
-      loginHints.append("appswitch:ios")
-      if appSwitchUri != nil {
-        loginHints.append("appswitch:resumeUrl:\(appSwitchUri!)")
+      if let prompt {
+        extraParams["prompt"] = prompt.rawValue
       }
+
+      if let action = eid.action {
+        loginHints.append("action:\(action.rawValue.lowercased())")
+      }
+      if eid is DanishMitID {
+        loginHints.append("appswitch:ios")
+        if appSwitchUri != nil {
+          loginHints.append("appswitch:resumeUrl:\(appSwitchUri!)")
+        }
+      }
+
+      extraParams["login_hint"] = loginHints.joined(separator: " ")
+
+      let authorizationRequest = OIDAuthorizationRequest(
+        configuration: iduraServiceConfiguration!,
+        clientId: clientId,
+        clientSecret: nil,
+        scopes: [OIDScopeOpenID] + eid.scopes,
+        redirectURL: redirectUri,
+        responseType: OIDResponseTypeCode,
+        additionalParameters: extraParams,
+      )
+
+      logger.debug(
+        "Starting external authentication flow with URL: \(authorizationRequest.authorizationRequestURL())",
+      )
+
+      let parRequest = try await pushAuthorizationRequest(authorizationRequest, span: span)
+      let codeResponse = try await launchBrowser(
+        presenting: presenting, request: parRequest, span: span)
+
+      return try await exchanceCode(codeResponse: codeResponse, span: span)
     }
+  }
 
-    extraParams["login_hint"] = loginHints.joined(separator: " ")
-
-    let authorizationRequest = OIDAuthorizationRequest(
-      configuration: iduraServiceConfiguration!,
-      clientId: clientId,
-      clientSecret: nil,
-      scopes: [OIDScopeOpenID] + eid.scopes,
-      redirectURL: redirectUri,
-      responseType: OIDResponseTypeCode,
-      additionalParameters: extraParams,
-    )
-
-    logger.debug(
-      "Starting external authentication flow with URL: \(authorizationRequest.authorizationRequestURL())",
-    )
-
-    let parRequest = try await pushAuthorizationRequest(authorizationRequest)
-    let authState = try await Task {
-      // This is the code that presents the browser to the user, so it needs to run on the
-      // main thread
-      @MainActor in
-      return try await withCheckedThrowingContinuation { continuation in
-        self.currentAuthorizationSession =
-          OIDAuthState.authState(
-            byPresenting: parRequest,
-            externalUserAgent: ASWebAuthenticationUserAgent(
-              presenting: presenting,
-              redirectUri: self.redirectUri,
-              useEphemeralBrowserSession: self.useEphemeralBrowserSession,
-            ),
-          ) { authState, error in
-            if let authState {
-              continuation.resume(returning: authState)
-            } else {
-              continuation.resume(throwing: error!)
+  private func launchBrowser(presenting: UIViewController, request: PARRequest, span: any SpanBase)
+    async throws
+    -> OIDAuthorizationResponse
+  {
+    return try await tracer.spanBuilder(spanName: "launch browser").setParent(span.context)
+      .runWithSpan {
+        _ in
+        return try await Task {
+          // This is the code that presents the browser to the user, so it needs to run on the
+          // main thread
+          @MainActor in
+          return try await withCheckedThrowingContinuation { continuation in
+            OIDAuthorizationService.present(
+              request,
+              externalUserAgent: ASWebAuthenticationUserAgent(
+                presenting: presenting,
+                redirectUri: self.redirectUri,
+                useEphemeralBrowserSession: self.useEphemeralBrowserSession,
+              )
+            ) { response, error in
+              if let response {
+                continuation.resume(returning: response)
+              } else if let error {
+                continuation.resume(throwing: error)
+              }
             }
           }
+        }.value
       }
-    }.value
-    currentAuthorizationSession = nil
+  }
 
-    let idToken = authState.lastTokenResponse!.idToken!
-    logger.debug("Got ID Token: \(idToken)")
-    let claims = try await iduraJwks!.verify(
-      idToken,
-      as: IDTokenClaims.self,
+  private func exchanceCode(codeResponse: OIDAuthorizationResponse, span: any SpanBase) async throws
+    -> (
+      String, IDTokenClaims
     )
+  {
+    let tokenResponse = try await tracer.spanBuilder(spanName: "code exchange").setParent(
+      span.context
+    ).runWithSpan { _ in
+      return try await withCheckedThrowingContinuation { continuation in
+        OIDAuthorizationService.perform(codeResponse.tokenExchangeRequest()!) { response, error in
+          if let response {
+            continuation.resume(returning: response)
+          } else if let error {
+            continuation.resume(throwing: error)
+          }
+        }
+      }
+    }
 
+    let idToken = tokenResponse.idToken!
+    logger.debug("Got ID Token: \(idToken)")
+    let claims =
+      try await tracer.spanBuilder(spanName: "JWT verification").setParent(span.context)
+      .runWithSpan { _ in
+        return try await iduraJwks!.verify(
+          idToken,
+          as: IDTokenClaims.self,
+        )
+      }
     return (idToken, claims)
   }
 
-  private func pushAuthorizationRequest(_ authorizationRequest: OIDAuthorizationRequest)
+  private func pushAuthorizationRequest(
+    _ authorizationRequest: OIDAuthorizationRequest, span: any SpanBase
+  )
     async throws
     -> PARRequest
   {
@@ -178,6 +226,11 @@ public class IduraVerify: @unchecked Sendable {
     parInitializationRequest.httpBody = URLComponents(
       url: authorizationRequest.authorizationRequestURL(), resolvingAgainstBaseURL: false)?.query?
       .data(using: .utf8)
+
+    propagator.inject(
+      spanContext: span.context,
+      carrier: &parInitializationRequest.allHTTPHeaderFields!,
+      setter: URLRequestSetter.instance)
 
     let (data, response) = try await URLSession.shared.data(for: parInitializationRequest)
     if (response as? HTTPURLResponse)?.statusCode != 201 {
@@ -204,35 +257,43 @@ public class IduraVerify: @unchecked Sendable {
     presenting: UIViewController,
     idTokenHint: String? = nil,
   ) async throws {
-    try await ensurePrepared()
+    return try await tracer.spanBuilder(spanName: "ios sdk logout").setNoParent().runWithSpan {
+      span in
+      try await ensurePrepared()
 
-    let request = OIDEndSessionRequest(
-      configuration: iduraServiceConfiguration!,
-      idTokenHint: idTokenHint ?? "",
-      postLogoutRedirectURL: redirectUri,
-      additionalParameters: nil,
-    )
+      let request = OIDEndSessionRequest(
+        configuration: iduraServiceConfiguration!,
+        idTokenHint: idTokenHint ?? "",
+        postLogoutRedirectURL: redirectUri,
+        additionalParameters: nil,
+      )
 
-    try await withCheckedThrowingContinuation { continuation in
-      Task {
-        @MainActor in
-        self.currentAuthorizationSession = OIDAuthorizationService.present(
-          request,
-          externalUserAgent: ASWebAuthenticationUserAgent(
-            presenting: presenting,
-            redirectUri: self.redirectUri,
-            useEphemeralBrowserSession: true,
-          ),
-        ) { response, error in
-          if response != nil {
-            continuation.resume()
-          } else if error != nil {
-            continuation.resume(throwing: error!)
+      try await withCheckedThrowingContinuation { continuation in
+        Task {
+          @MainActor in
+          var headers = [String: String]()
+          propagator.inject(
+            spanContext: span.context,
+            carrier: &headers,
+            setter: URLRequestSetter.instance)
+          OIDAuthorizationService.present(
+            request,
+            externalUserAgent: ASWebAuthenticationUserAgent(
+              presenting: presenting,
+              redirectUri: self.redirectUri,
+              useEphemeralBrowserSession: true,
+              headers: headers
+            ),
+          ) { response, error in
+            if response != nil {
+              continuation.resume()
+            } else if error != nil {
+              continuation.resume(throwing: error!)
+            }
           }
         }
       }
     }
-    currentAuthorizationSession = nil
   }
 
   /// Prepare the login manager by loading Idura OIDC configuration and JWK keyset.
