@@ -36,14 +36,14 @@ jobs:
       - name: Build Verify
         run: |
           xcodebuild build -quiet \
-            -scheme IduraVerify -destination "OS=26.0.1,name=iPhone 17 Pro"
+            -scheme IduraVerify -destination "OS=26.2,name=iPhone 17 Pro"
       - name: Build Examle
         working-directory: Example
         run: |
           touch Configs/config.xxconfig
           xcodebuild build -quiet \
-          -scheme Example -destination "OS=26.1,name=iPhone 17 Pro"
+          -scheme Example -destination "OS=26.2,name=iPhone 17 Pro"
       - name: Test
         run: |
           xcodebuild test -quiet \
-            -scheme IduraVerify -destination "OS=26.0.1,name=iPhone 17 Pro"
+            -scheme IduraVerify -destination "OS=26.2,name=iPhone 17 Pro"
