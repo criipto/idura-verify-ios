@@ -34,7 +34,7 @@ struct UnAuthenticatedView: View {
         ).padding()
         Button(
           action: {
-            var mitID = DanishMitID.substantial().withAction(.sign).withMessage("hello there!")
+            var mitID = DanishMitID.substantial().withMessage("hello there!")
 
             if let previouslyLoggedInAs {
               mitID = mitID.prefillUUID(previouslyLoggedInAs)
@@ -55,6 +55,21 @@ struct UnAuthenticatedView: View {
           action: { login(eid: NorwegianBankID.high().withSsn()) },
           label: {
             Text("Login with NO BankID")
+          },
+        ).padding()
+        Button(
+          action: { login(eid: Vipps()) },
+          label: {
+            Text("Login with Vipps")
+          },
+        ).padding()
+        Button(
+          action: {
+            login(
+              eid: FrejaID.extended().withAllEmails().withDefaultAndFaceConfirmation())
+          },
+          label: {
+            Text("Login with FrejaID")
           },
         ).padding()
       }.padding()

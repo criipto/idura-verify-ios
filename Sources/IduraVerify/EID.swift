@@ -87,6 +87,7 @@ public class NorwegianBankID: EID<NorwegianBankID> {
   private init(modifier: String) {
     super.init(acrValues: ["urn:grn:authn:no:bankid", modifier])
   }
+  override internal func getThis() -> NorwegianBankID { self }
 
   public static func substantial() -> NorwegianBankID { NorwegianBankID(modifier: "substantial") }
   public static func high() -> NorwegianBankID { NorwegianBankID(modifier: "high") }
@@ -111,6 +112,68 @@ public class SwedishBankID: EID<SwedishBankID> {
   // swiftlint:disable:next unneeded_override
   public override func withMessage(_ message: String) -> SwedishBankID {
     super.withMessage(message)
+  }
+}
+
+public class Vipps: EID<Vipps> {
+  public init() {
+    super.init(acrValues: ["urn:grn:authn:no:vipps"])
+  }
+  override internal func getThis() -> Vipps { self }
+
+  public func withEmail() -> Vipps { withScope("email") }
+  public func withPhone() -> Vipps { withScope("phone") }
+  public func withAddress() -> Vipps { withScope("address") }
+  public func withBirthdate() -> Vipps { withScope("birthdate") }
+  public func withSsn() -> Vipps { withScope("ssn") }
+}
+
+public class FrejaID<T>: EID<T> {
+  internal init(minRegistrationLevel: String) {
+    super.init(acrValues: ["urn:grn:authn:se:frejaid"])
+    self.withLoginHint("minregistrationlevel:\(minRegistrationLevel)")
+  }
+
+  public func withEmail() -> T { withScope("frejaid:email_address") }
+  public func withAllEmails() -> T { withScope("frejaid:all_email_addresses") }
+  public func withPhoneNumbers() -> T { withScope("frejaid:all_phone_numbers") }
+  public func withRegistrationLevel() -> T { withScope("frejaid:registration_level") }
+  public func sign(message: String, title: String?) -> T {
+    withAction(.sign)
+    if let title {
+      withLoginHint("title:\(base64Encode(title))")
+    }
+    return withMessage(message)
+  }
+}
+
+// For the static methods, we don't care about T https://stackoverflow.com/a/62559410/800016
+extension FrejaID where T == Any {
+  public static func basic() -> FrejaIDBasic { FrejaIDBasic(minRegistrationLevel: "basic") }
+  public static func extended() -> FrejaIDExtendedOrPlus {
+    FrejaIDExtendedOrPlus(minRegistrationLevel: "extended")
+  }
+  public static func plus() -> FrejaIDExtendedOrPlus {
+    FrejaIDExtendedOrPlus(minRegistrationLevel: "plus")
+  }
+
+}
+
+public class FrejaIDBasic: FrejaID<FrejaIDBasic> {
+  override internal func getThis() -> FrejaIDBasic { self }
+}
+public class FrejaIDExtendedOrPlus: FrejaID<FrejaIDExtendedOrPlus> {
+  override internal func getThis() -> FrejaIDExtendedOrPlus { self }
+  public func withBasicUserInfo() -> FrejaIDExtendedOrPlus { withScope("frejaid:basic_user_info") }
+  public func withDateOfBirth() -> FrejaIDExtendedOrPlus { withScope("frejaid:date_of_birth") }
+  public func withAge() -> FrejaIDExtendedOrPlus { withScope("frejaid:age") }
+  public func withSsn() -> FrejaIDExtendedOrPlus { withScope("frejaid:ssn") }
+  public func withAddresses() -> FrejaIDExtendedOrPlus { withScope("frejaid:addresses") }
+  public func withDocument() -> FrejaIDExtendedOrPlus { withScope("frejaid:document") }
+  public func withPhoto() -> FrejaIDExtendedOrPlus { withScope("frejaid:photo") }
+  public func withDocumentPhoto() -> FrejaIDExtendedOrPlus { withScope("frejaid:document_photo") }
+  public func withDefaultAndFaceConfirmation() -> FrejaIDExtendedOrPlus {
+    withLoginHint("userconfirmationmethod:defaultandface")
   }
 }
 
