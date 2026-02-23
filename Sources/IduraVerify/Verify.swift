@@ -13,20 +13,6 @@ public enum IduraVerifyErrors: Error {
   case parInitializationError
 }
 
-public struct IDTokenClaims: JWTPayload {
-  public var sub: String
-  public var name: String?
-  public var identityscheme: String
-  public var uuid: String?
-  var exp: ExpirationClaim
-  var nbf: NotBeforeClaim
-
-  public func verify(using _: some JWTAlgorithm) throws {
-    try exp.verifyNotExpired(
-      currentDate: Calendar.current.date(byAdding: .minute, value: 5, to: Date())!)
-  }
-}
-
 public enum Prompt: String {
   case login = "login"
   case none = "none"
@@ -94,7 +80,7 @@ public class IduraVerify: @unchecked Sendable {
     presenting: UIViewController,
     eid: EID<T>,
     prompt: Prompt? = .login
-  ) async throws -> (String, IDTokenClaims) {
+  ) async throws -> (String, JWT) {
     return try await tracer.spanBuilder(spanName: "ios sdk login").setNoParent().setAttribute(
       key: "acr_value", value: eid.acrValue
     ).runWithSpan { span in
@@ -179,7 +165,7 @@ public class IduraVerify: @unchecked Sendable {
 
   private func exchanceCode(codeResponse: OIDAuthorizationResponse, span: any SpanBase) async throws
     -> (
-      String, IDTokenClaims
+      String, JWT
     )
   {
     let tokenResponse = try await tracer.spanBuilder(spanName: "code exchange").setParent(
@@ -198,15 +184,18 @@ public class IduraVerify: @unchecked Sendable {
 
     let idToken = tokenResponse.idToken!
     logger.debug("Got ID Token: \(idToken)")
-    let claims =
+    let jwt =
       try await tracer.spanBuilder(spanName: "JWT verification").setParent(span.context)
       .runWithSpan { _ in
-        return try await iduraJwks!.verify(
+        let claims = try await iduraJwks!.verify(
           idToken,
           as: IDTokenClaims.self,
         )
+        let jwt = JWT(idToken: idToken, claims: claims)
+
+        return jwt
       }
-    return (idToken, claims)
+    return (idToken, jwt)
   }
 
   private func pushAuthorizationRequest(

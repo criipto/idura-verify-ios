@@ -94,11 +94,11 @@ struct UnAuthenticatedView: View {
     Task {
       do {
         loginState = .loading
-        let (idToken, claims) = try await iduraVerify.login(
+        let (idToken, jwt) = try await iduraVerify.login(
           presenting: getViewController(),
           eid: eid,
         )
-        loginState = .loggedIn(idToken: idToken, claims: claims)
+        loginState = .loggedIn(idToken: idToken, jwt: jwt)
       } catch {
         loginState = .notLoggedIn(
           errorMessage: "Error during login \(error.localizedDescription)",
