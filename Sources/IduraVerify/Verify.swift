@@ -61,7 +61,6 @@ public class IduraVerify: @unchecked Sendable {
   let clientId: String
   let domain: URL
   let redirectUri: URL
-  let appSwitchUri: URL?
   let useEphemeralBrowserSession = true
 
   public init(clientId: String, domain: String) {
@@ -72,7 +71,6 @@ public class IduraVerify: @unchecked Sendable {
 
     self.domain = URL(string: "https://" + domain)!
     redirectUri = self.domain.appendingPathComponent("/ios/callback")
-    appSwitchUri = self.domain.appendingPathComponent("/ios/callback/appswitch")
     self.clientId = clientId
   }
 
@@ -103,9 +101,7 @@ public class IduraVerify: @unchecked Sendable {
       }
       if eid is DanishMitID || eid is FrejaID {
         loginHints.append("appswitch:ios")
-        if appSwitchUri != nil {
-          loginHints.append("appswitch:resumeUrl:\(appSwitchUri!)")
-        }
+        loginHints.append("appswitch:resumeUrl:\(redirectUri)")
       }
 
       extraParams["login_hint"] = loginHints.joined(separator: " ")
