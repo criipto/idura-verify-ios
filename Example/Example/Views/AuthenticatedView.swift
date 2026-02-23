@@ -6,17 +6,17 @@ struct AuthenticatedView: View {
   var iduraVerify: IduraVerify
 
   var body: some View {
-    if case .loggedIn(_, let claims) = loginState {
+    if case .loggedIn(_, var jwt) = loginState {
       VStack {
         Text("Successfully logged in!").font(.largeTitle)
           .padding()
         Text("Sub").font(.title)
-        Text(claims.sub)
+        Text(jwt.sub)
           .padding(.bottom)
         Text("eID provider").font(.title)
-        Text(claims.identityscheme).padding(.bottom)
+        Text(jwt.identityscheme).padding(.bottom)
         Text("Name").font(.title)
-        Text(claims.name ?? "").padding(.bottom)
+        Text(jwt.getClaimValue(key: "name") as? String ?? "").padding(.bottom)
         Spacer()
         Button(action: logout) { Text("Log out") }
       }.padding()
@@ -24,7 +24,7 @@ struct AuthenticatedView: View {
   }
 
   func logout() {
-    guard case .loggedIn(let idToken, let claims) = loginState
+    guard case .loggedIn(let idToken, var jwt) = loginState
     else {
       return
     }
@@ -39,10 +39,11 @@ struct AuthenticatedView: View {
       } catch {
         loginState = .notLoggedIn(
           errorMessage: error.localizedDescription,
-          previouslyLoggedInAs: claims.uuid,
+          previouslyLoggedInAs: jwt.getClaimValue(key: "uuid") as? String,
         )
       }
-      loginState = .notLoggedIn(errorMessage: nil, previouslyLoggedInAs: claims.uuid)
+      loginState = .notLoggedIn(
+        errorMessage: nil, previouslyLoggedInAs: jwt.getClaimValue(key: "uuid") as? String)
     }
   }
 }
