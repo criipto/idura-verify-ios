@@ -99,8 +99,10 @@ public class IduraVerify: @unchecked Sendable {
       if let action = eid.action {
         loginHints.append("action:\(action.rawValue.lowercased())")
       }
-      if eid is DanishMitID || eid is FrejaID {
-        loginHints.append("appswitch:ios")
+      if eid is DanishMitID || eid is FrejaID || eid is SwedishBankID {
+        if !(eid is SwedishBankID) {
+          loginHints.append("appswitch:ios")
+        }
         loginHints.append("appswitch:resumeUrl:\(redirectUri)")
       }
 
