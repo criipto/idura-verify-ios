@@ -136,40 +136,20 @@ private class HeimdallExporter: SpanExporter {
   }
 }
 
-private struct IduraAttributesProcessor: SpanProcessor {
-  let isStartRequired: Bool = true
-  let isEndRequired: Bool = false
-  private let serverAddress: String
-  private let version: String
-
-  init(serverAddress: String, version: String) {
-    self.serverAddress = serverAddress
-    self.version = version
-  }
-
-  func onStart(
-    parentContext: OpenTelemetryApi.SpanContext?, span: any OpenTelemetrySdk.ReadableSpan
-  ) {
-    span.setAttribute(key: "server.address", value: serverAddress)
-    span.setAttribute(key: "idura.sdk.version", value: version)
-  }
-
-  func onEnd(span: any OpenTelemetrySdk.ReadableSpan) {}
-
-  func shutdown(explicitTimeout: TimeInterval?) {}
-
-  func forceFlush(timeout: TimeInterval?) {}
-}
-
 func initTelemetry(serverAddress: String, version: String) -> (TracerProvider, TextMapPropagator) {
   let tracerProvider = TracerProviderBuilder()
-    .add(spanProcessor: IduraAttributesProcessor(serverAddress: serverAddress, version: version))
     .add(
       spanProcessor: BatchSpanProcessor(
         spanExporter: HeimdallExporter(URL(string: "https://telemetry.svc.criipto.com/v1/trace")!))
     )
     .with(idGenerator: IduraIdGenerator())
-    .with(resource: DefaultResources().get())
+    .with(
+      resource: DefaultResources().get().merging(
+        other: Resource(attributes: [
+          "server.address": AttributeValue.string(serverAddress),
+          "idura.sdk.version": AttributeValue.string(version),
+        ]))
+    )
     .build()
 
   let propagator = W3CTraceContextPropagator()
