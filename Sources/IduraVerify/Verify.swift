@@ -63,14 +63,14 @@ public class IduraVerify: @unchecked Sendable {
   let redirectUri: URL
   let useEphemeralBrowserSession = true
 
-  public init(clientId: String, domain: String) {
+  public init(clientId: String, domain: String, redirectUri: URL? = nil) {
     let (tracerProvider, propagator) = initTelemetry(serverAddress: domain, version: version)
     self.propagator = propagator
     tracer = tracerProvider.get(
       instrumentationName: "idura-verify", instrumentationVersion: version)
 
     self.domain = URL(string: "https://" + domain)!
-    redirectUri = self.domain.appendingPathComponent("/ios/callback")
+    self.redirectUri = redirectUri ?? self.domain.appendingPathComponent("/ios/callback")
     self.clientId = clientId
 
     // Optimistically try to load the OIDC config and JWKS configuration, so it is ready when the
