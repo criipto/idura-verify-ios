@@ -11,7 +11,7 @@ struct AuthenticatedView: View {
         Text("Successfully logged in!").font(.largeTitle)
           .padding()
         Text("Sub").font(.title)
-        Text(jwt.sub)
+        Text(jwt.subject)
           .padding(.bottom)
         Text("eID provider").font(.title)
         Text(jwt.identityscheme).padding(.bottom)
