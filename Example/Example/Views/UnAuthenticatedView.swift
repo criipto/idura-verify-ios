@@ -73,20 +73,6 @@ struct UnAuthenticatedView: View {
           },
         ).padding()
       }.padding()
-        .onAppear(perform: onAppear)
-    }
-  }
-
-  func onAppear() {
-    Task {
-      do {
-        try await iduraVerify.prepare()
-      } catch {
-        loginState = .notLoggedIn(
-          errorMessage: "Error while preparing login manager: \(error.localizedDescription)",
-          previouslyLoggedInAs: nil,
-        )
-      }
     }
   }
 
