@@ -61,9 +61,12 @@ public class IduraVerify: @unchecked Sendable {
   let clientId: String
   let domain: URL
   let redirectUri: URL
-  let useEphemeralBrowserSession = true
+  let useEphemeralBrowserSession: Bool
 
-  public init(clientId: String, domain: String, redirectUri: URL? = nil) {
+  public init(
+    clientId: String, domain: String, redirectUri: URL? = nil,
+    useEphemeralBrowserSession: Bool? = nil
+  ) {
     let (tracerProvider, propagator) = initTelemetry(serverAddress: domain, version: version)
     self.propagator = propagator
     tracer = tracerProvider.get(
@@ -72,6 +75,7 @@ public class IduraVerify: @unchecked Sendable {
     self.domain = URL(string: "https://" + domain)!
     self.redirectUri = redirectUri ?? self.domain.appendingPathComponent("/ios/callback")
     self.clientId = clientId
+    self.useEphemeralBrowserSession = useEphemeralBrowserSession ?? true
 
     // Optimistically try to load the OIDC config and JWKS configuration, so it is ready when the
     // user initiates a login.
@@ -86,7 +90,8 @@ public class IduraVerify: @unchecked Sendable {
   public func login<T>(
     presenting: UIViewController,
     eid: EID<T>,
-    prompt: Prompt? = .login
+    prompt: Prompt? = .login,
+    useEphemeralBrowserSession: Bool? = nil
   ) async throws -> (String, JWT) {
     return try await tracer.spanBuilder(spanName: "ios sdk login").setNoParent().setAttribute(
       key: "acr_value", value: eid.acrValue
@@ -133,13 +138,17 @@ public class IduraVerify: @unchecked Sendable {
 
       let parRequest = try await pushAuthorizationRequest(authorizationRequest, span: span)
       let codeResponse = try await launchBrowser(
-        presenting: presenting, request: parRequest, span: span)
+        presenting: presenting, request: parRequest, span: span,
+        useEphemeralBrowserSession: useEphemeralBrowserSession)
 
       return try await exchanceCode(codeResponse: codeResponse, span: span)
     }
   }
 
-  private func launchBrowser(presenting: UIViewController, request: PARRequest, span: any SpanBase)
+  private func launchBrowser(
+    presenting: UIViewController, request: PARRequest, span: any SpanBase,
+    useEphemeralBrowserSession: Bool?
+  )
     async throws
     -> OIDAuthorizationResponse
   {
@@ -156,7 +165,8 @@ public class IduraVerify: @unchecked Sendable {
               externalUserAgent: ASWebAuthenticationUserAgent(
                 presenting: presenting,
                 redirectUri: self.redirectUri,
-                useEphemeralBrowserSession: self.useEphemeralBrowserSession,
+                useEphemeralBrowserSession: useEphemeralBrowserSession
+                  ?? self.useEphemeralBrowserSession,
               )
             ) { response, error in
               if let response {
