@@ -1,14 +1,6 @@
 import IduraVerify
 import SwiftUI
 
-extension View {
-  func getViewController() -> UIViewController {
-    // swiftlint:disable:next force_cast
-    let scene = UIApplication.shared.connectedScenes.first as! UIWindowScene
-    return scene.keyWindow!.rootViewController!
-  }
-}
-
 struct MockData: Codable {
   var name: String
 }
@@ -73,20 +65,6 @@ struct UnAuthenticatedView: View {
           },
         ).padding()
       }.padding()
-        .onAppear(perform: onAppear)
-    }
-  }
-
-  func onAppear() {
-    Task {
-      do {
-        try await iduraVerify.prepare()
-      } catch {
-        loginState = .notLoggedIn(
-          errorMessage: "Error while preparing login manager: \(error.localizedDescription)",
-          previouslyLoggedInAs: nil,
-        )
-      }
     }
   }
 
@@ -94,10 +72,7 @@ struct UnAuthenticatedView: View {
     Task {
       do {
         loginState = .loading
-        let (idToken, jwt) = try await iduraVerify.login(
-          presenting: getViewController(),
-          eid: eid,
-        )
+        let (idToken, jwt) = try await iduraVerify.login(eid: eid)
         loginState = .loggedIn(idToken: idToken, jwt: jwt)
       } catch {
         loginState = .notLoggedIn(

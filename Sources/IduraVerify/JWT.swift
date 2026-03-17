@@ -21,22 +21,22 @@ internal struct IDTokenClaims: JWTPayload {
 public struct JWT {
   public let idToken: String
 
-  public let sub: String
-  public let aud: String
-  public let iss: String
+  public let subject: String
+  public let audience: String
+  public let issuer: String
   public let identityscheme: String
-  public let exp: ExpirationClaim
-  public let nbf: NotBeforeClaim
-  public let iat: IssuedAtClaim
+  public let expireAt: ExpirationClaim
+  public let notBefore: NotBeforeClaim
+  public let issuedAt: IssuedAtClaim
 
   internal init(idToken: String, claims: IDTokenClaims) {
     self.idToken = idToken
-    self.sub = claims.sub
-    self.aud = claims.aud
-    self.iss = claims.iss
-    self.exp = claims.exp
-    self.nbf = claims.nbf
-    self.iat = claims.iat
+    self.subject = claims.sub
+    self.audience = claims.aud
+    self.issuer = claims.iss
+    self.expireAt = claims.exp
+    self.notBefore = claims.nbf
+    self.issuedAt = claims.iat
     self.identityscheme = claims.identityscheme
   }
 

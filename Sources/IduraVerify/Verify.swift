@@ -1,9 +1,9 @@
 @preconcurrency internal import AppAuth
 @preconcurrency internal import AppAuthCore
+import Foundation
 import JWTKit
 @preconcurrency import OpenTelemetryApi
 import OpenTelemetryConcurrency
-import SwiftUI
 import os
 
 // TODO: remember to update this when pushing a new version!
@@ -61,28 +61,41 @@ public class IduraVerify: @unchecked Sendable {
   let clientId: String
   let domain: URL
   let redirectUri: URL
-  let useEphemeralBrowserSession = true
+  let useEphemeralBrowserSession: Bool
 
-  public init(clientId: String, domain: String) {
+  public init(
+    clientId: String, domain: String, redirectUri: URL? = nil,
+    useEphemeralBrowserSession: Bool? = nil,
+  ) {
     let (tracerProvider, propagator) = initTelemetry(serverAddress: domain, version: version)
     self.propagator = propagator
     tracer = tracerProvider.get(
       instrumentationName: "idura-verify", instrumentationVersion: version)
 
     self.domain = URL(string: "https://" + domain)!
-    redirectUri = self.domain.appendingPathComponent("/ios/callback")
+    self.redirectUri = redirectUri ?? self.domain.appendingPathComponent("/ios/callback")
     self.clientId = clientId
+    self.useEphemeralBrowserSession = useEphemeralBrowserSession ?? true
+
+    // Optimistically try to load the OIDC config and JWKS configuration, so it is ready when the
+    // user initiates a login.
+    // We run this in a detached task, since we don't want the constructor to be async. If an error
+    // is thrown here, it will be swallowed. We then retry when calling `login`,
+    // bubbling any errors.
+    Task.detached {
+      try await self.prepare()
+    }
   }
 
   public func login<T>(
-    presenting: UIViewController,
     eid: EID<T>,
-    prompt: Prompt? = .login
+    prompt: Prompt? = .login,
+    useEphemeralBrowserSession: Bool? = nil
   ) async throws -> (String, JWT) {
     return try await tracer.spanBuilder(spanName: "ios sdk login").setNoParent().setAttribute(
       key: "acr_value", value: eid.acrValue
     ).runWithSpan { span in
-      try await ensurePrepared()
+      try await prepare()
 
       logger.log(
         "Starting login flow for \(eid.acrValue), traceId \(span.context.traceId.hexString)")
@@ -124,13 +137,15 @@ public class IduraVerify: @unchecked Sendable {
 
       let parRequest = try await pushAuthorizationRequest(authorizationRequest, span: span)
       let codeResponse = try await launchBrowser(
-        presenting: presenting, request: parRequest, span: span)
+        request: parRequest, span: span, useEphemeralBrowserSession: useEphemeralBrowserSession)
 
       return try await exchanceCode(codeResponse: codeResponse, span: span)
     }
   }
 
-  private func launchBrowser(presenting: UIViewController, request: PARRequest, span: any SpanBase)
+  private func launchBrowser(
+    request: PARRequest, span: any SpanBase, useEphemeralBrowserSession: Bool?
+  )
     async throws
     -> OIDAuthorizationResponse
   {
@@ -145,9 +160,9 @@ public class IduraVerify: @unchecked Sendable {
             OIDAuthorizationService.present(
               request,
               externalUserAgent: ASWebAuthenticationUserAgent(
-                presenting: presenting,
                 redirectUri: self.redirectUri,
-                useEphemeralBrowserSession: self.useEphemeralBrowserSession,
+                useEphemeralBrowserSession: useEphemeralBrowserSession
+                  ?? self.useEphemeralBrowserSession,
               )
             ) { response, error in
               if let response {
@@ -240,71 +255,12 @@ public class IduraVerify: @unchecked Sendable {
     return PARRequest(request: authorizationRequest, parRequestUri: urlBuilder.url!)
   }
 
-  public func logout(
-    presenting: UIViewController,
-    idTokenHint: String? = nil,
-  ) async throws {
-    return try await tracer.spanBuilder(spanName: "ios sdk logout").setNoParent().runWithSpan {
-      span in
-      try await ensurePrepared()
-
-      let request = OIDEndSessionRequest(
-        configuration: iduraServiceConfiguration!,
-        idTokenHint: idTokenHint ?? "",
-        postLogoutRedirectURL: redirectUri,
-        additionalParameters: nil,
-      )
-
-      try await withCheckedThrowingContinuation { continuation in
-        Task {
-          @MainActor in
-          var headers = [String: String]()
-          propagator.inject(
-            spanContext: span.context,
-            carrier: &headers,
-            setter: URLRequestSetter.instance)
-          OIDAuthorizationService.present(
-            request,
-            externalUserAgent: ASWebAuthenticationUserAgent(
-              presenting: presenting,
-              redirectUri: self.redirectUri,
-              useEphemeralBrowserSession: true,
-              headers: headers
-            ),
-          ) { response, error in
-            if response != nil {
-              continuation.resume()
-            } else if error != nil {
-              continuation.resume(throwing: error!)
-            }
-          }
-        }
-      }
-    }
-  }
-
   /// Prepare the login manager by loading Idura OIDC configuration and JWK keyset.
-  /// This should be called when you present the 'Login with X' button to your user, so that the
-  /// required configuration is already loaded when a user clicks the button.
-  public func prepare() async throws {
+  private func prepare() async throws {
+    guard !prepared else { return }
     try await loadIduraOIDCConfiguration()
     try await loadIduraJwks()
     prepared = true
-  }
-
-  /// A helper method, used to ensure that the login manager is in the expected state when a login
-  /// or logout starts. Ideally, the login manager should be prepared as soon as the button to log
-  /// in is shown, but if the developer forgot, or the end-user started the flow before the
-  /// prepare operation completed, we call prepare here.
-  private func ensurePrepared() async throws {
-    if !prepared {
-      logger
-        .debug(
-          // swiftlint:disable:next line_length
-          "LoginManager was not in prepared state when calling login / logout. This can happen either if you forget to call `prepare()` from your own code, if the call to `prepare()` failed, or if the user started a session before your call to `prepare()` completed.",
-        )
-      try await prepare()
-    }
   }
 
   private func loadIduraJwks() async throws {

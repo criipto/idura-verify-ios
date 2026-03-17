@@ -11,7 +11,7 @@ struct AuthenticatedView: View {
         Text("Successfully logged in!").font(.largeTitle)
           .padding()
         Text("Sub").font(.title)
-        Text(jwt.sub)
+        Text(jwt.subject)
           .padding(.bottom)
         Text("eID provider").font(.title)
         Text(jwt.identityscheme).padding(.bottom)
@@ -24,24 +24,12 @@ struct AuthenticatedView: View {
   }
 
   func logout() {
-    guard case .loggedIn(let idToken, var jwt) = loginState
+    guard case .loggedIn(_, var jwt) = loginState
     else {
       return
     }
 
     Task {
-      loginState = .loading
-      do {
-        try await iduraVerify.logout(
-          presenting: getViewController(),
-          idTokenHint: idToken,
-        )
-      } catch {
-        loginState = .notLoggedIn(
-          errorMessage: error.localizedDescription,
-          previouslyLoggedInAs: jwt.getClaimValue(key: "uuid") as? String,
-        )
-      }
       loginState = .notLoggedIn(
         errorMessage: nil, previouslyLoggedInAs: jwt.getClaimValue(key: "uuid") as? String)
     }

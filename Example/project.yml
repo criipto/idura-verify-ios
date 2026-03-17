@@ -2,7 +2,7 @@ name: Example
 groups:
   - Configs
 options:
-  bundleIdPrefix: eu.idura
+  bundleIdPrefix: eu.idura.sdk
 usesTabs: false
 identWidth: 2
 packages:
