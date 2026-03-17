@@ -1,16 +1,27 @@
 internal import AppAuth
-private import AuthenticationServices
+internal import AuthenticationServices
+
+internal class PresentationContextProvider: NSObject,
+  ASWebAuthenticationPresentationContextProviding
+{
+  public static let shared = PresentationContextProvider()
+
+  public func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+    let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+
+    // Prioritize the scene that is currently active and visible
+    let activeScene = scenes.first { $0.activationState == .foregroundActive } ?? scenes.first
+
+    // Find the key window or the first available window in that scene
+    return activeScene?.windows.first { $0.isKeyWindow } ?? activeScene?.windows.first
+      // Fallback to a new ASPresentationAnchor (UIWindow) if all else fails
+      ?? ASPresentationAnchor()
+  }
+}
 
 /// An OIDC user agent, using `ASWebAuthenticationSession`.
 @MainActor
-class ASWebAuthenticationUserAgent: NSObject, @preconcurrency OIDExternalUserAgent,
-  ASWebAuthenticationPresentationContextProviding
-{
-  fileprivate func presentationAnchor(for _: ASWebAuthenticationSession) -> ASPresentationAnchor {
-    presenting.view.window!
-  }
-
-  private let presenting: UIViewController
+class ASWebAuthenticationUserAgent: NSObject, @preconcurrency OIDExternalUserAgent {
   private let redirectUri: URL
   private let useEphemeralBrowserSession: Bool
   private let headers: [String: String]?
@@ -18,10 +29,8 @@ class ASWebAuthenticationUserAgent: NSObject, @preconcurrency OIDExternalUserAge
   private var webAuth: ASWebAuthenticationSession?
 
   init(
-    presenting: UIViewController, redirectUri: URL, useEphemeralBrowserSession: Bool,
-    headers: [String: String]? = nil
+    redirectUri: URL, useEphemeralBrowserSession: Bool, headers: [String: String]? = nil,
   ) {
-    self.presenting = presenting
     self.redirectUri = redirectUri
     self.useEphemeralBrowserSession = useEphemeralBrowserSession
     self.headers = headers
@@ -47,7 +56,7 @@ class ASWebAuthenticationUserAgent: NSObject, @preconcurrency OIDExternalUserAge
     self.webAuth = webAuth
 
     webAuth.prefersEphemeralWebBrowserSession = useEphemeralBrowserSession
-    webAuth.presentationContextProvider = self
+    webAuth.presentationContextProvider = PresentationContextProvider.shared
     if let headers {
       webAuth.additionalHeaderFields = headers
     }

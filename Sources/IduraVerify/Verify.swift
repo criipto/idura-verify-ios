@@ -1,9 +1,9 @@
 @preconcurrency internal import AppAuth
 @preconcurrency internal import AppAuthCore
+import Foundation
 import JWTKit
 @preconcurrency import OpenTelemetryApi
 import OpenTelemetryConcurrency
-import SwiftUI
 import os
 
 // TODO: remember to update this when pushing a new version!
@@ -65,7 +65,7 @@ public class IduraVerify: @unchecked Sendable {
 
   public init(
     clientId: String, domain: String, redirectUri: URL? = nil,
-    useEphemeralBrowserSession: Bool? = nil
+    useEphemeralBrowserSession: Bool? = nil,
   ) {
     let (tracerProvider, propagator) = initTelemetry(serverAddress: domain, version: version)
     self.propagator = propagator
@@ -88,7 +88,6 @@ public class IduraVerify: @unchecked Sendable {
   }
 
   public func login<T>(
-    presenting: UIViewController,
     eid: EID<T>,
     prompt: Prompt? = .login,
     useEphemeralBrowserSession: Bool? = nil
@@ -138,16 +137,14 @@ public class IduraVerify: @unchecked Sendable {
 
       let parRequest = try await pushAuthorizationRequest(authorizationRequest, span: span)
       let codeResponse = try await launchBrowser(
-        presenting: presenting, request: parRequest, span: span,
-        useEphemeralBrowserSession: useEphemeralBrowserSession)
+        request: parRequest, span: span, useEphemeralBrowserSession: useEphemeralBrowserSession)
 
       return try await exchanceCode(codeResponse: codeResponse, span: span)
     }
   }
 
   private func launchBrowser(
-    presenting: UIViewController, request: PARRequest, span: any SpanBase,
-    useEphemeralBrowserSession: Bool?
+    request: PARRequest, span: any SpanBase, useEphemeralBrowserSession: Bool?
   )
     async throws
     -> OIDAuthorizationResponse
@@ -163,7 +160,6 @@ public class IduraVerify: @unchecked Sendable {
             OIDAuthorizationService.present(
               request,
               externalUserAgent: ASWebAuthenticationUserAgent(
-                presenting: presenting,
                 redirectUri: self.redirectUri,
                 useEphemeralBrowserSession: useEphemeralBrowserSession
                   ?? self.useEphemeralBrowserSession,
@@ -259,10 +255,7 @@ public class IduraVerify: @unchecked Sendable {
     return PARRequest(request: authorizationRequest, parRequestUri: urlBuilder.url!)
   }
 
-  public func logout(
-    presenting: UIViewController,
-    idTokenHint: String? = nil,
-  ) async throws {
+  public func logout(idTokenHint: String? = nil) async throws {
     return try await tracer.spanBuilder(spanName: "ios sdk logout").setNoParent().runWithSpan {
       span in
       try await prepare()
@@ -285,10 +278,9 @@ public class IduraVerify: @unchecked Sendable {
           OIDAuthorizationService.present(
             request,
             externalUserAgent: ASWebAuthenticationUserAgent(
-              presenting: presenting,
               redirectUri: self.redirectUri,
               useEphemeralBrowserSession: true,
-              headers: headers
+              headers: headers,
             ),
           ) { response, error in
             if response != nil {

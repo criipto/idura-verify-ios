@@ -32,10 +32,7 @@ struct AuthenticatedView: View {
     Task {
       loginState = .loading
       do {
-        try await iduraVerify.logout(
-          presenting: getViewController(),
-          idTokenHint: idToken,
-        )
+        try await iduraVerify.logout(idTokenHint: idToken)
       } catch {
         loginState = .notLoggedIn(
           errorMessage: error.localizedDescription,
