@@ -24,21 +24,12 @@ struct AuthenticatedView: View {
   }
 
   func logout() {
-    guard case .loggedIn(let idToken, var jwt) = loginState
+    guard case .loggedIn(_, var jwt) = loginState
     else {
       return
     }
 
     Task {
-      loginState = .loading
-      do {
-        try await iduraVerify.logout(idTokenHint: idToken)
-      } catch {
-        loginState = .notLoggedIn(
-          errorMessage: error.localizedDescription,
-          previouslyLoggedInAs: jwt.getClaimValue(key: "uuid") as? String,
-        )
-      }
       loginState = .notLoggedIn(
         errorMessage: nil, previouslyLoggedInAs: jwt.getClaimValue(key: "uuid") as? String)
     }

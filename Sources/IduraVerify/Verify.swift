@@ -80,7 +80,7 @@ public class IduraVerify: @unchecked Sendable {
     // Optimistically try to load the OIDC config and JWKS configuration, so it is ready when the
     // user initiates a login.
     // We run this in a detached task, since we don't want the constructor to be async. If an error
-    // is thrown here, it will be swallowed. We then retry when calling `login` or `logout`,
+    // is thrown here, it will be swallowed. We then retry when calling `login`,
     // bubbling any errors.
     Task.detached {
       try await self.prepare()
@@ -253,45 +253,6 @@ public class IduraVerify: @unchecked Sendable {
       URLQueryItem(name: "request_uri", value: parResponse.requestUri),
     ]
     return PARRequest(request: authorizationRequest, parRequestUri: urlBuilder.url!)
-  }
-
-  public func logout(idTokenHint: String? = nil) async throws {
-    return try await tracer.spanBuilder(spanName: "ios sdk logout").setNoParent().runWithSpan {
-      span in
-      try await prepare()
-
-      let request = OIDEndSessionRequest(
-        configuration: iduraServiceConfiguration!,
-        idTokenHint: idTokenHint ?? "",
-        postLogoutRedirectURL: redirectUri,
-        additionalParameters: nil,
-      )
-
-      try await withCheckedThrowingContinuation { continuation in
-        Task {
-          @MainActor in
-          var headers = [String: String]()
-          propagator.inject(
-            spanContext: span.context,
-            carrier: &headers,
-            setter: URLRequestSetter.instance)
-          OIDAuthorizationService.present(
-            request,
-            externalUserAgent: ASWebAuthenticationUserAgent(
-              redirectUri: self.redirectUri,
-              useEphemeralBrowserSession: true,
-              headers: headers,
-            ),
-          ) { response, error in
-            if response != nil {
-              continuation.resume()
-            } else if error != nil {
-              continuation.resume(throwing: error!)
-            }
-          }
-        }
-      }
-    }
   }
 
   /// Prepare the login manager by loading Idura OIDC configuration and JWK keyset.
