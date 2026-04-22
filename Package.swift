@@ -33,6 +33,7 @@ let package = Package(
         .product(name: "JWTKit", package: "jwt-kit"),
         .product(name: "OpenTelemetrySdk", package: "opentelemetry-swift-core"),
         .product(name: "OpenTelemetryConcurrency", package: "opentelemetry-swift-core"),
+        .product(name: "OpenTelemetryProtocolExporterHTTP", package: "opentelemetry-swift"),
         .product(name: "ResourceExtension", package: "opentelemetry-swift"),
         .product(name: "UUIDV7", package: "swift-uuidv7"),
       ],
