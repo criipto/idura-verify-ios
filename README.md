@@ -197,3 +197,36 @@ let iduraVerify = IduraVerify(
   redirectUri: URL(string: "https://" + domain)!.appendingPathComponent("/my/custom/callback")
 )
 ```
+
+## Presenting the browser yourself (backend-initialized flow)
+
+By default, the SDK handles the entire OIDC flow end-to-end: it builds the authorization request, pushes it to Idura, opens the browser, receives the callback, exchanges the code, and returns the verified JWT on the device.
+
+Some applications instead want the authorization request to be initialized by their own backend — for example, when the JWT must stay on the server rather than reaching the device, or in hybrid setups such as Auth0 where the token exchange happens server-side. In that case the SDK does not need to generate the OIDC request at all, but it can still be used to open the browser and receive the callback URL. The `BrowserManager` class is exposed for exactly this purpose:
+
+```swift
+let browser = try BrowserManager(
+  redirectUri: URL(string: "https://your-domain.idura.broker/ios/callback")!,
+  useEphemeralBrowserSession: true
+)
+
+// `authorizeUrl` is the authorization URL your backend returned after initializing the flow.
+let callbackUrl = try await browser.present(url: authorizeUrl)
+
+// `callbackUrl` contains the OIDC response (code, state, or error). Send it to your backend
+// to complete the code exchange.
+```
+
+The same Associated Domain setup described in [Initialization](#initialization) applies: `redirectUri` must be an `https://` URL on a domain configured as an Associated Domain in your app's entitlements, otherwise `ASWebAuthenticationSession` will not match the callback. The initializer throws `BrowserManagerError.configurationError` if `redirectUri` does not use the `https` scheme.
+
+### App-switching when using `BrowserManager`
+
+In the default end-to-end flow, the SDK appends the app-switch `login_hint`s automatically — `appswitch:ios` for Danish MitID and FrejaID, and `appswitch:resumeUrl:<redirectUri>` for Danish MitID, FrejaID, and Swedish BankID — so that the authenticator apps can open the eID app and return the user to your app afterwards.
+
+When you initialize the OIDC request on your own backend and only use `BrowserManager` to present it, **your backend is responsible for including these hints** in the authorization request it pushes to Idura. If they are missing, the flow still works in the web view, but users will not be switched back from the authenticator app to your app. Add the following `login_hint` values (space-separated, alongside any other hints) when initializing the request:
+
+| eID               | Hints to include                                                      |
+| ----------------- | --------------------------------------------------------------------- |
+| Danish MitID      | `appswitch:ios`, `appswitch:resumeUrl:<your redirectUri>`             |
+| FrejaID           | `appswitch:ios`, `appswitch:resumeUrl:<your redirectUri>`             |
+| Swedish BankID    | `appswitch:resumeUrl:<your redirectUri>`                              |
