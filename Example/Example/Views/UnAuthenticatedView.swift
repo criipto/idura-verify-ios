@@ -64,6 +64,15 @@ struct UnAuthenticatedView: View {
             Text("Login with FrejaID")
           },
         ).padding()
+        Button(
+          action: {
+            login(
+              eid: AgeVerification.over(.over15).over(.over18).withCountry(.denmark))
+          },
+          label: {
+            Text("Age verification (over 15 and 18)")
+          },
+        ).padding()
       }.padding()
     }
   }

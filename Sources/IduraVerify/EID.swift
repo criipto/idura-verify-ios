@@ -199,3 +199,36 @@ public class Other: EID<Other> {
   }
   override internal func getThis() -> Other { self }
 }
+
+public enum AgeVerificationCountry: String {
+  case denmark = "DK"
+  case sweden = "SE"
+  case norway = "NO"
+  case finland = "FI"
+}
+
+public enum AgeVerificationAge: Int {
+  case over15 = 15
+  case over16 = 16
+  case over18 = 18
+  case over21 = 21
+}
+
+public class AgeVerification: EID<AgeVerification> {
+  private init() {
+    super.init(acrValues: ["urn:age-verification"])
+  }
+  override internal func getThis() -> AgeVerification { self }
+
+  public static func over(_ age: AgeVerificationAge) -> AgeVerification {
+    AgeVerification().over(age)
+  }
+
+  public func over(_ age: AgeVerificationAge) -> AgeVerification {
+    withScope("is_over_\(age.rawValue)")
+  }
+
+  public func withCountry(_ country: AgeVerificationCountry) -> AgeVerification {
+    withLoginHint("country:\(country.rawValue)")
+  }
+}
