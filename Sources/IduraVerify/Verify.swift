@@ -6,7 +6,6 @@ import JWTKit
 import OpenTelemetryConcurrency
 import os
 
-// TODO: remember to update this when pushing a new version!
 private let version = "0.0.1"
 
 public enum IduraVerifyErrors: Error {
