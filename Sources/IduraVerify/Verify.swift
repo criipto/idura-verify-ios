@@ -6,7 +6,7 @@ import JWTKit
 import OpenTelemetryConcurrency
 import os
 
-private let version = "1.0.0"
+private let version = "1.0.1"
 
 public enum IduraVerifyErrors: Error {
   case parInitializationError
