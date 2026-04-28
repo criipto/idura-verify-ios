@@ -27,3 +27,29 @@ func other_falback() {
   #expect(other.acrValue == acrValue)
   #expect(other.scopes == ["something"])
 }
+
+// MARK: - supportsAppSwitch
+
+@Test
+func supportsAppSwitch_typedBuilders() {
+  #expect(DanishMitID.substantial().supportsAppSwitch == true)
+  #expect(FrejaID<Any>.basic().supportsAppSwitch == true)
+  #expect(SwedishBankID.sameDevice().supportsAppSwitch == true)
+
+  #expect(NorwegianBankID.substantial().supportsAppSwitch == false)
+  #expect(Vipps().supportsAppSwitch == false)
+}
+
+@Test
+func supportsAppSwitch_otherFallback() {
+  // The whole point of the data-driven property: Other("...") should match the same
+  // prefixes that the typed builders do, so wrappers (e.g. an Expo / RN wrapper that
+  // only has a string acr_value from JS) get the correct behaviour without having to
+  // map strings back to the typed eID classes.
+  #expect(Other(acrValue: "urn:grn:authn:dk:mitid:substantial").supportsAppSwitch == true)
+  #expect(Other(acrValue: "urn:grn:authn:se:frejaid").supportsAppSwitch == true)
+  #expect(Other(acrValue: "urn:grn:authn:se:bankid:same-device").supportsAppSwitch == true)
+
+  #expect(Other(acrValue: "urn:grn:authn:no:bankid:substantial").supportsAppSwitch == false)
+  #expect(Other(acrValue: "urn:grn:authn:foo:bar").supportsAppSwitch == false)
+}

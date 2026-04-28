@@ -47,7 +47,25 @@ public class EID<T> {
       "message:\(base64Encode(message))"
     )
   }
+
+  /// Whether this eID's login supports app-switch redirection back to the consumer app.
+  /// When true, the SDK injects an `appswitch:resumeUrl:` login hint so the eID app can
+  /// universal-link back into the consumer when it finishes.
+  ///
+  /// Derived from the `acrValue` prefix so that `Other("urn:grn:authn:dk:mitid:substantial")`
+  /// and the same value arrived at via `DanishMitID.substantial()` behave identically.
+  /// Subclasses can override if they ever need to disagree with the prefix-based default,
+  /// but the intended extension point is the `APP_SWITCH_ACR_PREFIXES` list below.
+  internal var supportsAppSwitch: Bool {
+    appswitchAcrPrefixes.contains { acrValue.hasPrefix($0) }
+  }
 }
+
+private let appswitchAcrPrefixes = [
+  "urn:grn:authn:dk:mitid",
+  "urn:grn:authn:se:frejaid",
+  "urn:grn:authn:se:bankid",
+]
 
 public class DanishMitID: EID<DanishMitID> {
   private init(modifier: String) {

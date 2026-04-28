@@ -111,8 +111,8 @@ public class IduraVerify: @unchecked Sendable {
       if let action = eid.action {
         loginHints.append("action:\(action.rawValue.lowercased())")
       }
-      if eid is DanishMitID || eid is FrejaID || eid is SwedishBankID {
-        if !(eid is SwedishBankID) {
+      if eid.supportsAppSwitch {
+        if !eid.acrValue.starts(with: "urn:grn:authn:se:bankid") {
           loginHints.append("appswitch:ios")
         }
         loginHints.append("appswitch:resumeUrl:\(redirectUri)")
