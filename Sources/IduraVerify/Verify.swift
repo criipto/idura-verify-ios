@@ -82,8 +82,8 @@ public class IduraVerify: @unchecked Sendable {
     }
   }
 
-  public func login<T>(
-    eid: EID<T>,
+  public func login(
+    eid: some EID,
     prompt: Prompt? = .login,
     useEphemeralBrowserSession: Bool? = nil
   ) async throws -> (String, JWT) {

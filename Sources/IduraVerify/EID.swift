@@ -1,6 +1,6 @@
 import Foundation
 
-public enum Action: String {
+public enum Action: String, Sendable {
   case login
   case confirm
   case accept
@@ -9,56 +9,7 @@ public enum Action: String {
 }
 
 private func base64Encode(_ str: String) -> String {
-  (str.data(using: .utf8)?.base64EncodedString(
-    options: Data.Base64EncodingOptions(rawValue: 0)))!
-}
-
-public class EID<T> {
-  internal var scopes: [String] = []
-  internal var loginHints: [String] = []
-  internal var action: Action?
-  internal var acrValues: [String]
-
-  internal init(acrValues: [String]) {
-    self.acrValues = acrValues
-  }
-
-  public var acrValue: String { acrValues.joined(separator: ":") }
-
-  internal func getThis() -> T { preconditionFailure("This method must be overridden") }
-
-  public func withScope(_ scope: String) -> T {
-    scopes.append(scope)
-    return getThis()
-  }
-
-  public func withLoginHint(_ loginHint: String) -> T {
-    loginHints.append(loginHint)
-    return getThis()
-  }
-
-  internal func withAction(_ action: Action) -> T {
-    self.action = action
-    return getThis()
-  }
-
-  internal func withMessage(_ message: String) -> T {
-    withLoginHint(
-      "message:\(base64Encode(message))"
-    )
-  }
-
-  /// Whether this eID's login supports app-switch redirection back to the consumer app.
-  /// When true, the SDK injects an `appswitch:resumeUrl:` login hint so the eID app can
-  /// universal-link back into the consumer when it finishes.
-  ///
-  /// Derived from the `acrValue` prefix so that `Other("urn:grn:authn:dk:mitid:substantial")`
-  /// and the same value arrived at via `DanishMitID.substantial()` behave identically.
-  /// Subclasses can override if they ever need to disagree with the prefix-based default,
-  /// but the intended extension point is the `APP_SWITCH_ACR_PREFIXES` list below.
-  internal var supportsAppSwitch: Bool {
-    appswitchAcrPrefixes.contains { acrValue.hasPrefix($0) }
-  }
+  Data(str.utf8).base64EncodedString()
 }
 
 private let appswitchAcrPrefixes = [
@@ -67,11 +18,68 @@ private let appswitchAcrPrefixes = [
   "urn:grn:authn:se:bankid",
 ]
 
-public class DanishMitID: EID<DanishMitID> {
-  private init(modifier: String) {
-    super.init(acrValues: ["urn:grn:authn:dk:mitid", modifier])
+public protocol EID: Sendable {
+  var acrValues: [String] { get }
+  var scopes: [String] { get set }
+  var loginHints: [String] { get set }
+  var action: Action? { get set }
+}
+
+extension EID {
+  public var acrValue: String { acrValues.joined(separator: ":") }
+
+  /// Whether this eID's login supports app-switch redirection back to the consumer app.
+  /// When true, the SDK injects an `appswitch:resumeUrl:` login hint so the eID app can
+  /// universal-link back into the consumer when it finishes.
+  ///
+  /// Derived from the `acrValue` prefix so that `Other("urn:grn:authn:dk:mitid:substantial")`
+  /// and the same value arrived at via `DanishMitID.substantial()` behave identically.
+  internal var supportsAppSwitch: Bool {
+    appswitchAcrPrefixes.contains { acrValue.hasPrefix($0) }
   }
-  override internal func getThis() -> DanishMitID { self }
+
+  public func withScope(_ scope: String) -> Self {
+    var copy = self
+    copy.scopes.append(scope)
+    return copy
+  }
+
+  public func withLoginHint(_ loginHint: String) -> Self {
+    var copy = self
+    copy.loginHints.append(loginHint)
+    return copy
+  }
+}
+
+/// eIDs that allow attaching a user-visible message (typically shown during signing).
+public protocol SupportsMessage: EID {}
+
+extension SupportsMessage {
+  public func withMessage(_ message: String) -> Self {
+    withLoginHint("message:\(base64Encode(message))")
+  }
+}
+
+/// eIDs that allow setting a non-default action (e.g. `.sign`, `.approve`).
+public protocol SupportsAction: EID {}
+
+extension SupportsAction {
+  public func withAction(_ action: Action) -> Self {
+    var copy = self
+    copy.action = action
+    return copy
+  }
+}
+
+public struct DanishMitID: SupportsMessage, SupportsAction {
+  public let acrValues: [String]
+  public var scopes: [String] = []
+  public var loginHints: [String] = []
+  public var action: Action?
+
+  private init(modifier: String) {
+    self.acrValues = ["urn:grn:authn:dk:mitid", modifier]
+  }
 
   public static func substantial() -> DanishMitID { DanishMitID(modifier: "substantial") }
   public static func high() -> DanishMitID { DanishMitID(modifier: "high") }
@@ -91,21 +99,18 @@ public class DanishMitID: EID<DanishMitID> {
   public func prefillVatId(_ vatId: String) -> DanishMitID { withLoginHint("vatid:DK\(vatId)") }
 
   public func withSsn() -> DanishMitID { withScope("ssn") }
-
   public func withAddress() -> DanishMitID { withScope("address") }
-
-  // This override is changing the visibility of the method from internal to public.
-  // swiftlint:disable:next unneeded_override
-  public override func withAction(_ action: Action) -> DanishMitID { super.withAction(action) }
-  // swiftlint:disable:next unneeded_override
-  public override func withMessage(_ message: String) -> DanishMitID { super.withMessage(message) }
 }
 
-public class NorwegianBankID: EID<NorwegianBankID> {
+public struct NorwegianBankID: EID {
+  public let acrValues: [String]
+  public var scopes: [String] = []
+  public var loginHints: [String] = []
+  public var action: Action?
+
   private init(modifier: String) {
-    super.init(acrValues: ["urn:grn:authn:no:bankid", modifier])
+    self.acrValues = ["urn:grn:authn:no:bankid", modifier]
   }
-  override internal func getThis() -> NorwegianBankID { self }
 
   public static func substantial() -> NorwegianBankID { NorwegianBankID(modifier: "substantial") }
   public static func high() -> NorwegianBankID { NorwegianBankID(modifier: "high") }
@@ -113,11 +118,15 @@ public class NorwegianBankID: EID<NorwegianBankID> {
   public func withSsn() -> NorwegianBankID { withScope("ssn") }
 }
 
-public class SwedishBankID: EID<SwedishBankID> {
+public struct SwedishBankID: SupportsMessage {
+  public let acrValues: [String]
+  public var scopes: [String] = []
+  public var loginHints: [String] = []
+  public var action: Action?
+
   private init(modifier: String?) {
-    super.init(acrValues: ["urn:grn:authn:se:bankid", modifier].compactMap { $0 })
+    self.acrValues = ["urn:grn:authn:se:bankid", modifier].compactMap { $0 }
   }
-  override internal func getThis() -> SwedishBankID { self }
 
   public static func otherDevice() -> SwedishBankID { SwedishBankID(modifier: "another-device:qr") }
   public static func sameDevice() -> SwedishBankID { SwedishBankID(modifier: "same-device") }
@@ -125,19 +134,20 @@ public class SwedishBankID: EID<SwedishBankID> {
 
   public func withSsn() -> SwedishBankID { withScope("ssn") }
 
-  public func sign(message: String) -> SwedishBankID { withMessage(message).withAction(.sign) }
-
-  // swiftlint:disable:next unneeded_override
-  public override func withMessage(_ message: String) -> SwedishBankID {
-    super.withMessage(message)
+  public func sign(message: String) -> SwedishBankID {
+    var result = withMessage(message)
+    result.action = .sign
+    return result
   }
 }
 
-public class Vipps: EID<Vipps> {
-  public init() {
-    super.init(acrValues: ["urn:grn:authn:no:vipps"])
-  }
-  override internal func getThis() -> Vipps { self }
+public struct Vipps: EID {
+  public let acrValues: [String] = ["urn:grn:authn:no:vipps"]
+  public var scopes: [String] = []
+  public var loginHints: [String] = []
+  public var action: Action?
+
+  public init() {}
 
   public func withEmail() -> Vipps { withScope("email") }
   public func withPhone() -> Vipps { withScope("phone") }
@@ -146,42 +156,54 @@ public class Vipps: EID<Vipps> {
   public func withSsn() -> Vipps { withScope("ssn") }
 }
 
-public class FrejaID<T>: EID<T> {
-  internal init(minRegistrationLevel: String) {
-    super.init(acrValues: ["urn:grn:authn:se:frejaid"])
-    self.withLoginHint("minregistrationlevel:\(minRegistrationLevel)")
-  }
+public protocol FrejaIDType: EID {}
 
-  public func withEmail() -> T { withScope("frejaid:email_address") }
-  public func withAllEmails() -> T { withScope("frejaid:all_email_addresses") }
-  public func withPhoneNumbers() -> T { withScope("frejaid:all_phone_numbers") }
-  public func withRegistrationLevel() -> T { withScope("frejaid:registration_level") }
-  public func sign(message: String, title: String?) -> T {
-    withAction(.sign)
+extension FrejaIDType {
+  public func withEmail() -> Self { withScope("frejaid:email_address") }
+  public func withAllEmails() -> Self { withScope("frejaid:all_email_addresses") }
+  public func withPhoneNumbers() -> Self { withScope("frejaid:all_phone_numbers") }
+  public func withRegistrationLevel() -> Self { withScope("frejaid:registration_level") }
+  public func sign(message: String, title: String?) -> Self {
+    var result = self
+    result.action = .sign
     if let title {
-      withLoginHint("title:\(base64Encode(title))")
+      result = result.withLoginHint("title:\(base64Encode(title))")
     }
-    return withMessage(message)
+    return result.withLoginHint("message:\(base64Encode(message))")
   }
 }
 
-// For the static methods, we don't care about T https://stackoverflow.com/a/62559410/800016
-extension FrejaID where T == Any {
-  public static func basic() -> FrejaIDBasic { FrejaIDBasic(minRegistrationLevel: "basic") }
+public enum FrejaID {
+  public static func basic() -> FrejaIDBasic { FrejaIDBasic() }
   public static func extended() -> FrejaIDExtendedOrPlus {
     FrejaIDExtendedOrPlus(minRegistrationLevel: "extended")
   }
   public static func plus() -> FrejaIDExtendedOrPlus {
     FrejaIDExtendedOrPlus(minRegistrationLevel: "plus")
   }
-
 }
 
-public class FrejaIDBasic: FrejaID<FrejaIDBasic> {
-  override internal func getThis() -> FrejaIDBasic { self }
+public struct FrejaIDBasic: FrejaIDType {
+  public let acrValues: [String] = ["urn:grn:authn:se:frejaid"]
+  public var scopes: [String] = []
+  public var loginHints: [String]
+  public var action: Action?
+
+  fileprivate init() {
+    self.loginHints = ["minregistrationlevel:basic"]
+  }
 }
-public class FrejaIDExtendedOrPlus: FrejaID<FrejaIDExtendedOrPlus> {
-  override internal func getThis() -> FrejaIDExtendedOrPlus { self }
+
+public struct FrejaIDExtendedOrPlus: FrejaIDType {
+  public let acrValues: [String] = ["urn:grn:authn:se:frejaid"]
+  public var scopes: [String] = []
+  public var loginHints: [String]
+  public var action: Action?
+
+  fileprivate init(minRegistrationLevel: String) {
+    self.loginHints = ["minregistrationlevel:\(minRegistrationLevel)"]
+  }
+
   public func withBasicUserInfo() -> FrejaIDExtendedOrPlus { withScope("frejaid:basic_user_info") }
   public func withDateOfBirth() -> FrejaIDExtendedOrPlus { withScope("frejaid:date_of_birth") }
   public func withAge() -> FrejaIDExtendedOrPlus { withScope("frejaid:age") }
@@ -195,14 +217,16 @@ public class FrejaIDExtendedOrPlus: FrejaID<FrejaIDExtendedOrPlus> {
   }
 }
 
-public class Mock: EID<Mock> {
-  public init() {
-    super.init(acrValues: ["urn:grn:authn:mock"])
-  }
-  override internal func getThis() -> Mock { self }
+public struct Mock: EID {
+  public let acrValues: [String] = ["urn:grn:authn:mock"]
+  public var scopes: [String] = []
+  public var loginHints: [String] = []
+  public var action: Action?
+
+  public init() {}
 
   /// Provide an object of mock data, which will be inserted into the returned JWT.
-  /// The data must confirm to the https://developer.apple.com/documentation/swift/encodable protocol
+  /// The data must conform to the https://developer.apple.com/documentation/swift/encodable protocol
   public func withMockData(_ data: Encodable) throws -> Mock {
     withMockData(String(data: try JSONEncoder().encode(data), encoding: .utf8)!)
   }
@@ -211,32 +235,38 @@ public class Mock: EID<Mock> {
   public func withMockData(_ data: String) -> Mock { withLoginHint("mock:\(base64Encode(data))") }
 }
 
-public class Other: EID<Other> {
+public struct Other: EID {
+  public let acrValues: [String]
+  public var scopes: [String] = []
+  public var loginHints: [String] = []
+  public var action: Action?
+
   public init(acrValue: String) {
-    super.init(acrValues: [acrValue])
+    self.acrValues = [acrValue]
   }
-  override internal func getThis() -> Other { self }
 }
 
-public enum AgeVerificationCountry: String {
+public enum AgeVerificationCountry: String, Sendable {
   case denmark = "DK"
   case sweden = "SE"
   case norway = "NO"
   case finland = "FI"
 }
 
-public enum AgeVerificationAge: Int {
+public enum AgeVerificationAge: Int, Sendable {
   case over15 = 15
   case over16 = 16
   case over18 = 18
   case over21 = 21
 }
 
-public class AgeVerification: EID<AgeVerification> {
-  private init() {
-    super.init(acrValues: ["urn:age-verification"])
-  }
-  override internal func getThis() -> AgeVerification { self }
+public struct AgeVerification: EID {
+  public let acrValues: [String] = ["urn:age-verification"]
+  public var scopes: [String] = []
+  public var loginHints: [String] = []
+  public var action: Action?
+
+  private init() {}
 
   public static func over(_ age: AgeVerificationAge) -> AgeVerification {
     AgeVerification().over(age)
