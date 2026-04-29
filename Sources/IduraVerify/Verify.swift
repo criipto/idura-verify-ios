@@ -42,7 +42,8 @@ private class PARRequest: OIDAuthorizationRequest, @unchecked Sendable {
   }
 }
 
-public class IduraVerify: @unchecked Sendable {
+@MainActor
+public final class IduraVerify {
   let logger = Logger(subsystem: "eu.idura.loginexample", category: "LoginManager")
   let tracer: Tracer
   let propagator: TextMapPropagator
@@ -73,11 +74,11 @@ public class IduraVerify: @unchecked Sendable {
     self.useEphemeralBrowserSession = useEphemeralBrowserSession ?? true
 
     // Optimistically try to load the OIDC config and JWKS configuration, so it is ready when the
-    // user initiates a login.
-    // We run this in a detached task, since we don't want the constructor to be async. If an error
-    // is thrown here, it will be swallowed. We then retry when calling `login`,
-    // bubbling any errors.
-    Task.detached {
+    // user initiates a login. We run this in a Task because the constructor isn't async. The
+    // Task inherits the main-actor isolation, so it serialises correctly with later `prepare()`
+    // calls from `login(...)`. If an error is thrown here it's swallowed; `login(...)` will
+    // retry and surface it.
+    Task {
       try await self.prepare()
     }
   }
@@ -144,41 +145,30 @@ public class IduraVerify: @unchecked Sendable {
 
   private func launchBrowser(
     request: PARRequest, span: any SpanBase, useEphemeralBrowserSession: Bool?
-  )
-    async throws
-    -> OIDAuthorizationResponse
-  {
+  ) async throws -> OIDAuthorizationResponse {
     return try await tracer.spanBuilder(spanName: "launch browser").setParent(span.context)
-      .runWithSpan {
-        _ in
-        return try await Task {
-          // This is the code that presents the browser to the user, so it needs to run on the
-          // main thread
-          @MainActor in
-          return try await withCheckedThrowingContinuation { continuation in
-            OIDAuthorizationService.present(
-              request,
-              externalUserAgent: ASWebAuthenticationUserAgent(
-                redirectUri: self.redirectUri,
-                useEphemeralBrowserSession: useEphemeralBrowserSession
-                  ?? self.useEphemeralBrowserSession,
-              )
-            ) { response, error in
-              if let response {
-                continuation.resume(returning: response)
-              } else if let error {
-                continuation.resume(throwing: error)
-              }
+      .runWithSpan { _ in
+        return try await withCheckedThrowingContinuation { continuation in
+          OIDAuthorizationService.present(
+            request,
+            externalUserAgent: ASWebAuthenticationUserAgent(
+              redirectUri: self.redirectUri,
+              useEphemeralBrowserSession: useEphemeralBrowserSession
+                ?? self.useEphemeralBrowserSession,
+            )
+          ) { response, error in
+            if let response {
+              continuation.resume(returning: response)
+            } else if let error {
+              continuation.resume(throwing: error)
             }
           }
-        }.value
+        }
       }
   }
 
   private func exchanceCode(codeResponse: OIDAuthorizationResponse, span: any SpanBase) async throws
-    -> (
-      String, JWT
-    )
+    -> (String, JWT)
   {
     let tokenResponse = try await tracer.spanBuilder(spanName: "code exchange").setParent(
       span.context
@@ -196,16 +186,13 @@ public class IduraVerify: @unchecked Sendable {
 
     let idToken = tokenResponse.idToken!
     logger.debug("Got ID Token: \(idToken)")
-    let jwt =
-      try await tracer.spanBuilder(spanName: "JWT verification").setParent(span.context)
+    let jwt = try await tracer.spanBuilder(spanName: "JWT verification").setParent(span.context)
       .runWithSpan { _ in
         let claims = try await iduraJwks!.verify(
           idToken,
           as: IDTokenClaims.self,
         )
-        let jwt = JWT(idToken: idToken, claims: claims)
-
-        return jwt
+        return JWT(idToken: idToken, claims: claims)
       }
     return (idToken, jwt)
   }
