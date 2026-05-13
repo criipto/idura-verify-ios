@@ -8,10 +8,6 @@ import os
 
 private let version = "1.0.1"
 
-public enum IduraVerifyErrors: Error {
-  case parInitializationError
-}
-
 public enum Prompt: String {
   case login = "login"
   case none = "none"
@@ -91,54 +87,58 @@ public class IduraVerify: @unchecked Sendable {
     prompt: Prompt? = .login,
     useEphemeralBrowserSession: Bool? = nil
   ) async throws -> (String, JWT) {
-    return try await tracer.spanBuilder(spanName: "ios sdk login").setNoParent().setAttribute(
-      key: "acr_value", value: eid.acrValue
-    ).runWithSpan { span in
-      try await prepare()
+    do {
+      return try await tracer.spanBuilder(spanName: "ios sdk login").setNoParent().setAttribute(
+        key: "acr_value", value: eid.acrValue
+      ).runWithSpan { span in
+        try await prepare()
 
-      logger.log(
-        "Starting login flow for \(eid.acrValue), traceId \(span.context.traceId.hexString)")
+        logger.log(
+          "Starting login flow for \(eid.acrValue), traceId \(span.context.traceId.hexString)")
 
-      var loginHints = [] + eid.loginHints
-      var extraParams = [String: String]()
+        var loginHints = [] + eid.loginHints
+        var extraParams = [String: String]()
 
-      extraParams["acr_values"] = eid.acrValue
+        extraParams["acr_values"] = eid.acrValue
 
-      if let prompt {
-        extraParams["prompt"] = prompt.rawValue
-      }
-
-      if let action = eid.action {
-        loginHints.append("action:\(action.rawValue.lowercased())")
-      }
-      if eid.supportsAppSwitch {
-        if !eid.acrValue.starts(with: "urn:grn:authn:se:bankid") {
-          loginHints.append("appswitch:ios")
+        if let prompt {
+          extraParams["prompt"] = prompt.rawValue
         }
-        loginHints.append("appswitch:resumeUrl:\(redirectUri)")
+
+        if let action = eid.action {
+          loginHints.append("action:\(action.rawValue.lowercased())")
+        }
+        if eid.supportsAppSwitch {
+          if !eid.acrValue.starts(with: "urn:grn:authn:se:bankid") {
+            loginHints.append("appswitch:ios")
+          }
+          loginHints.append("appswitch:resumeUrl:\(redirectUri)")
+        }
+
+        extraParams["login_hint"] = loginHints.joined(separator: " ")
+
+        let authorizationRequest = OIDAuthorizationRequest(
+          configuration: iduraServiceConfiguration!,
+          clientId: clientId,
+          clientSecret: nil,
+          scopes: [OIDScopeOpenID] + eid.scopes,
+          redirectURL: redirectUri,
+          responseType: OIDResponseTypeCode,
+          additionalParameters: extraParams,
+        )
+
+        logger.debug(
+          "Starting external authentication flow with URL: \(authorizationRequest.authorizationRequestURL())",
+        )
+
+        let parRequest = try await pushAuthorizationRequest(authorizationRequest, span: span)
+        let codeResponse = try await launchBrowser(
+          request: parRequest, span: span, useEphemeralBrowserSession: useEphemeralBrowserSession)
+
+        return try await exchanceCode(codeResponse: codeResponse, span: span)
       }
-
-      extraParams["login_hint"] = loginHints.joined(separator: " ")
-
-      let authorizationRequest = OIDAuthorizationRequest(
-        configuration: iduraServiceConfiguration!,
-        clientId: clientId,
-        clientSecret: nil,
-        scopes: [OIDScopeOpenID] + eid.scopes,
-        redirectURL: redirectUri,
-        responseType: OIDResponseTypeCode,
-        additionalParameters: extraParams,
-      )
-
-      logger.debug(
-        "Starting external authentication flow with URL: \(authorizationRequest.authorizationRequestURL())",
-      )
-
-      let parRequest = try await pushAuthorizationRequest(authorizationRequest, span: span)
-      let codeResponse = try await launchBrowser(
-        request: parRequest, span: span, useEphemeralBrowserSession: useEphemeralBrowserSession)
-
-      return try await exchanceCode(codeResponse: codeResponse, span: span)
+    } catch {
+      throw IduraVerifyError.from(error)
     }
   }
 
@@ -234,8 +234,12 @@ public class IduraVerify: @unchecked Sendable {
       setter: URLRequestSetter.instance)
 
     let (data, response) = try await URLSession.shared.data(for: parInitializationRequest)
-    if (response as? HTTPURLResponse)?.statusCode != 201 {
-      throw IduraVerifyErrors.parInitializationError
+    let httpStatus = (response as? HTTPURLResponse)?.statusCode
+    if httpStatus != 201 {
+      throw IduraVerifyError.internalError(
+        message: "PAR request failed: \(httpStatus.map(String.init) ?? "non-HTTP response")",
+        cause: nil,
+      )
     }
 
     struct ParResponse: Decodable {
