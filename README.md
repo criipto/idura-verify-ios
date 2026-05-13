@@ -134,6 +134,28 @@ let address = jwt.getClaimValue(key: "address") as? [String: Any]
 let streetAddress = address?["street_address"]
 ```
 
+## Error handling
+
+`IduraVerify.login()` throws `IduraVerifyError` for any runtime failure, with concrete cases you can pattern-match on:
+
+```swift
+import IduraVerify
+
+do {
+  let (idToken, jwt) = try await iduraVerify.login(eid: DanishMitID.substantial())
+  // ...
+} catch IduraVerifyError.userCancelled {
+  // User dismissed the browser or the IdP returned `access_denied`. Usually a normal
+  // action — quietly return them to the previous screen rather than showing an error.
+} catch IduraVerifyError.oauth(let error, let errorDescription) {
+  // The IdP returned a non-cancellation OAuth error. `error` is the OAuth 2.0 error code,
+  // `errorDescription` is the optional human-readable text.
+} catch let err as IduraVerifyError {
+  // Catch-all for SDK-internal failures (PAR, JWT verification, browser plumbing). Treat
+  // as unrecoverable; surface a generic error to the user and log the cause.
+}
+```
+
 # Customization
 
 ## Using a custom callback domain
