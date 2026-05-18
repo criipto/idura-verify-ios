@@ -99,6 +99,19 @@ let iduraVerify = IduraVerify(
 )
 ```
 
+`IduraVerify` is stateful — it caches the OIDC discovery document and JWKS and runs a telemetry exporter. Construct one instance and hold it for the lifetime of the app. In SwiftUI, store it with `@StateObject` (or inject via `@Environment`) so the instance survives view rebuilds:
+
+```swift
+struct MainView: View {
+    @StateObject private var iduraVerify = IduraVerify(
+        clientId: Bundle.main.object(forInfoDictionaryKey: "IDURA_CLIENT_ID") as! String,
+        domain: Bundle.main.object(forInfoDictionaryKey: "IDURA_DOMAIN") as! String,
+    )
+
+    var body: some View { /* ... */ }
+}
+```
+
 ### Ephemeral sessions
 
 The web view used to display the login page to the user allows you to choose between using an ephemeral or a shared browser session.

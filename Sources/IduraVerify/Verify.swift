@@ -1,9 +1,11 @@
 @preconcurrency internal import AppAuth
 @preconcurrency internal import AppAuthCore
+import Combine
 import Foundation
 import JWTKit
 @preconcurrency import OpenTelemetryApi
 import OpenTelemetryConcurrency
+import OpenTelemetrySdk
 import os
 
 private let version = "1.0.1"
@@ -42,9 +44,36 @@ private class PARRequest: OIDAuthorizationRequest, @unchecked Sendable {
   }
 }
 
+/// Entry point for the Idura Verify SDK. One instance can serve many logins; construct it once
+/// at app startup and hold it for the lifetime of the process.
+///
+/// `IduraVerify` is stateful: on construction it kicks off background work to fetch the OIDC
+/// discovery document and JWKS, caches both, and runs a telemetry exporter. Constructing a new
+/// instance on every screen render wastes those requests and leaves the previous exporter
+/// dangling.
+///
+/// ## SwiftUI
+///
+/// Store the instance in `@StateObject` (or inject via `@Environment`) so SwiftUI keeps a single
+/// instance across view rebuilds:
+///
+/// ```swift
+/// struct MainView: View {
+///   @StateObject private var iduraVerify = IduraVerify(clientId: ..., domain: ...)
+///   var body: some View { ... }
+/// }
+/// ```
+///
+/// Do *not* assign `IduraVerify(...)` to a plain stored property of a `View` — every state
+/// change recomputes the view and would build a new instance.
 @MainActor
-public final class IduraVerify {
+public final class IduraVerify: ObservableObject {
   let logger = Logger(subsystem: "eu.idura.loginexample", category: "LoginManager")
+  /// Held only so `deinit` can drain the span exporter; not used elsewhere. Marked
+  /// `nonisolated(unsafe)` so the deinit (which is implicitly nonisolated on a `@MainActor`
+  /// class) can read it. Safe: the property is a `let`, and `TracerProviderSdk.shutdown()`
+  /// is documented to handle being called at process teardown.
+  nonisolated(unsafe) private let tracerProvider: TracerProviderSdk
   let tracer: Tracer
   let propagator: TextMapPropagator
 
@@ -64,6 +93,7 @@ public final class IduraVerify {
     useEphemeralBrowserSession: Bool? = nil,
   ) {
     let (tracerProvider, propagator) = initTelemetry(serverAddress: domain, version: version)
+    self.tracerProvider = tracerProvider
     self.propagator = propagator
     tracer = tracerProvider.get(
       instrumentationName: "idura-verify", instrumentationVersion: version)
@@ -81,6 +111,10 @@ public final class IduraVerify {
     Task {
       try await self.prepare()
     }
+  }
+
+  deinit {
+    tracerProvider.shutdown()
   }
 
   public func login(
