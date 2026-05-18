@@ -185,7 +185,6 @@ public final class IduraVerify {
     }
 
     let idToken = tokenResponse.idToken!
-    logger.debug("Got ID Token: \(idToken)")
     let jwt = try await tracer.spanBuilder(spanName: "JWT verification").setParent(span.context)
       .runWithSpan { _ in
         let claims = try await iduraJwks!.verify(
