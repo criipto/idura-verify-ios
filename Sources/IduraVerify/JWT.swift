@@ -25,18 +25,18 @@ public struct JWT {
   public let audience: String
   public let issuer: String
   public let identityscheme: String
-  public let expireAt: ExpirationClaim
-  public let notBefore: NotBeforeClaim
-  public let issuedAt: IssuedAtClaim
+  public let expireAt: Date
+  public let notBefore: Date
+  public let issuedAt: Date
 
   internal init(idToken: String, claims: IDTokenClaims) {
     self.idToken = idToken
     self.subject = claims.sub
     self.audience = claims.aud
     self.issuer = claims.iss
-    self.expireAt = claims.exp
-    self.notBefore = claims.nbf
-    self.issuedAt = claims.iat
+    self.expireAt = claims.exp.value
+    self.notBefore = claims.nbf.value
+    self.issuedAt = claims.iat.value
     self.identityscheme = claims.identityscheme
   }
 
