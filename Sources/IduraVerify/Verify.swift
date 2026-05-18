@@ -4,7 +4,6 @@ import Foundation
 import JWTKit
 @preconcurrency import OpenTelemetryApi
 import OpenTelemetryConcurrency
-import os
 
 private let version = "1.0.1"
 
@@ -44,7 +43,7 @@ private class PARRequest: OIDAuthorizationRequest, @unchecked Sendable {
 
 @MainActor
 public final class IduraVerify {
-  let logger = Logger(subsystem: "eu.idura.loginexample", category: "LoginManager")
+  let logger: any IduraVerifyLogger
   let tracer: Tracer
   let propagator: TextMapPropagator
 
@@ -62,12 +61,14 @@ public final class IduraVerify {
   public init(
     clientId: String, domain: String, redirectUri: URL? = nil,
     useEphemeralBrowserSession: Bool? = nil,
+    logger: (any IduraVerifyLogger)? = nil,
   ) {
     let (tracerProvider, propagator) = initTelemetry(serverAddress: domain, version: version)
     self.propagator = propagator
     tracer = tracerProvider.get(
       instrumentationName: "idura-verify", instrumentationVersion: version)
 
+    self.logger = logger ?? OSLogIduraVerifyLogger()
     self.domain = URL(string: "https://" + domain)!
     self.redirectUri = redirectUri ?? self.domain.appendingPathComponent("/ios/callback")
     self.clientId = clientId
@@ -94,7 +95,7 @@ public final class IduraVerify {
       ).runWithSpan { span in
         try await prepare()
 
-        logger.log(
+        logger.info(
           "Starting login flow for \(eid.acrValue), traceId \(span.context.traceId.hexString)")
 
         var loginHints = [] + eid.loginHints
