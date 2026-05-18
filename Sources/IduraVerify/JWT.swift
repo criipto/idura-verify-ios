@@ -34,6 +34,7 @@ public struct JWT {
   public let expireAt: Date
   public let notBefore: Date
   public let issuedAt: Date
+  public let dictionary: [String: Any]
 
   internal init(idToken: String, claims: IDTokenClaims) {
     self.idToken = idToken
@@ -47,9 +48,7 @@ public struct JWT {
     self.notBefore = claims.nbf.value
     self.issuedAt = claims.iat.value
     self.identityscheme = claims.identityscheme
-  }
 
-  public lazy var dictionary: [String: Any] = {
     let parser = DefaultJWTParser()
 
     // At this point, we have already extracted the token parts, and parsed the token. We know for
@@ -58,14 +57,12 @@ public struct JWT {
     let (_, encodedPayload, _) = try! parser.getTokenParts([UInt8](idToken.utf8))
     let payloadBytes = encodedPayload.base64URLDecodedBytes()
 
-    let dictionary =
+    self.dictionary =
       try! JSONSerialization.jsonObject(with: Data(payloadBytes), options: []) as! [String: Any]
     // swiftlint:enable force_try force_cast
+  }
 
-    return dictionary
-  }()
-
-  public mutating func getClaimValue(key: String) -> Any? {
+  public func getClaimValue(key: String) -> Any? {
     return dictionary[key]
   }
 }
