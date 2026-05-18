@@ -83,19 +83,21 @@ struct UnAuthenticatedView: View {
         loginState = .loading
         let result = try await iduraVerify.login(eid: eid)
         loginState = .loggedIn(idToken: result.jwt.idToken, jwt: result.jwt)
+        print("Completed login with trace ID \(result.traceId)")
       } catch IduraVerifyError.userCancelled {
         loginState = .notLoggedIn(
           errorMessage: "User cancelled",
           previouslyLoggedInAs: nil,
         )
-      } catch IduraVerifyError.oauth(let error, let errorDescription) {
+      } catch IduraVerifyError.oauth(let error, let errorDescription, let traceId) {
         loginState = .notLoggedIn(
-          errorMessage: "Error during login \(error), \(errorDescription ?? "No description")",
+          errorMessage:
+            "Error during login \(error), \(errorDescription ?? "No description") (trace \(traceId))",
           previouslyLoggedInAs: nil,
         )
       } catch let err as IduraVerifyError {
         loginState = .notLoggedIn(
-          errorMessage: "Error during login \(err.localizedDescription)",
+          errorMessage: "Error during login \(err.localizedDescription) (trace \(err.traceId))",
           previouslyLoggedInAs: nil,
         )
       }

@@ -134,6 +134,8 @@ print(result.jwt.sub)
 
 `login()` returns a `LoginResult`. The verified JWT is on `result.jwt`; the base64 encoded ID token is on `result.jwt.idToken` if you need it.
 
+`result.traceId` is the Idura trace ID — Log it alongside your own error reporting so you can locate the flow in the Idura dashboard.
+
 The SDK provides builder classes for some of the eIDs supported by Idura Verify. You should use these when possible, since they provide helper methods for the scopes and login hints supported by the specific eID provider. For example, Danish MitID supports SSN prefilling, which you can access using the `prefillSsn` method:
 
 ```swift
@@ -151,7 +153,7 @@ let streetAddress = address?["street_address"]
 
 ## Error handling
 
-`IduraVerify.login()` throws `IduraVerifyError` for any runtime failure, with concrete cases you can pattern-match on:
+`IduraVerify.login()` throws `IduraVerifyError` for any runtime failure, with concrete cases you can pattern-match on. Every case also carries a `traceId`. Log it alongside your own error reporting so you can locate the flow in the Idura dashboard.
 
 ```swift
 import IduraVerify
@@ -159,15 +161,17 @@ import IduraVerify
 do {
   let result = try await iduraVerify.login(eid: DanishMitID.substantial())
   // ...
-} catch IduraVerifyError.userCancelled {
+} catch IduraVerifyError.userCancelled(let traceId) {
   // User dismissed the browser or the IdP returned `access_denied`. Usually a normal
   // action — quietly return them to the previous screen rather than showing an error.
-} catch IduraVerifyError.oauth(let error, let errorDescription) {
+  _ = traceId
+} catch IduraVerifyError.oauth(let error, let errorDescription, let traceId) {
   // The IdP returned a non-cancellation OAuth error. `error` is the OAuth 2.0 error code,
   // `errorDescription` is the optional human-readable text.
+  _ = (error, errorDescription, traceId)
 } catch let err as IduraVerifyError {
   // Catch-all for SDK-internal failures (PAR, JWT verification, browser plumbing). Treat
-  // as unrecoverable; surface a generic error to the user and log the cause.
+  // as unrecoverable; surface a generic error to the user and log `err.traceId`.
 }
 ```
 
