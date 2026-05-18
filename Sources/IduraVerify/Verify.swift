@@ -6,7 +6,6 @@ import JWTKit
 @preconcurrency import OpenTelemetryApi
 import OpenTelemetryConcurrency
 import OpenTelemetrySdk
-import os
 
 private let version = "1.0.1"
 
@@ -68,7 +67,6 @@ private class PARRequest: OIDAuthorizationRequest, @unchecked Sendable {
 /// change recomputes the view and would build a new instance.
 @MainActor
 public final class IduraVerify: ObservableObject {
-  let logger = Logger(subsystem: "eu.idura.loginexample", category: "LoginManager")
   /// Held only so `deinit` can drain the span exporter; not used elsewhere. Marked
   /// `nonisolated(unsafe)` so the deinit (which is implicitly nonisolated on a `@MainActor`
   /// class) can read it. Safe: the property is a `let`, and `TracerProviderSdk.shutdown()`
@@ -129,8 +127,6 @@ public final class IduraVerify: ObservableObject {
       do {
         try await prepare()
 
-        logger.log("Starting login flow for \(eid.acrValue), traceId \(traceId)")
-
         var loginHints = [] + eid.loginHints
         var extraParams = [String: String]()
 
@@ -169,10 +165,6 @@ public final class IduraVerify: ObservableObject {
             message: "Authorization request was built without a nonce", cause: nil, traceId: traceId
           )
         }
-
-        logger.debug(
-          "Starting external authentication flow with URL: \(authorizationRequest.authorizationRequestURL())",
-        )
 
         let parRequest = try await pushAuthorizationRequest(authorizationRequest, span: span)
         let codeResponse = try await launchBrowser(
@@ -232,7 +224,6 @@ public final class IduraVerify: ObservableObject {
     }
 
     let idToken = tokenResponse.idToken!
-    logger.debug("Got ID Token: \(idToken)")
     return try await tracer.spanBuilder(spanName: "JWT verification").setParent(span.context)
       .runWithSpan { _ in
         let claims = try await iduraJwks!.verify(
