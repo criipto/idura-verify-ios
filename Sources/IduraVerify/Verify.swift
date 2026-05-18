@@ -121,15 +121,15 @@ public final class IduraVerify: ObservableObject {
     eid: some EID,
     prompt: Prompt? = .login,
     useEphemeralBrowserSession: Bool? = nil
-  ) async throws -> (String, JWT) {
-    do {
-      return try await tracer.spanBuilder(spanName: "ios sdk login").setNoParent().setAttribute(
-        key: "acr_value", value: eid.acrValue
-      ).runWithSpan { span in
+  ) async throws -> LoginResult {
+    return try await tracer.spanBuilder(spanName: "ios sdk login").setNoParent().setAttribute(
+      key: "acr_value", value: eid.acrValue
+    ).runWithSpan { span in
+      let traceId = span.context.traceId.hexString
+      do {
         try await prepare()
 
-        logger.log(
-          "Starting login flow for \(eid.acrValue), traceId \(span.context.traceId.hexString)")
+        logger.log("Starting login flow for \(eid.acrValue), traceId \(traceId)")
 
         var loginHints = [] + eid.loginHints
         var extraParams = [String: String]()
@@ -166,7 +166,8 @@ public final class IduraVerify: ObservableObject {
         // we can verify the value round-trips back in the ID token.
         guard let expectedNonce = authorizationRequest.nonce else {
           throw IduraVerifyError.internalError(
-            message: "Authorization request was built without a nonce", cause: nil)
+            message: "Authorization request was built without a nonce", cause: nil, traceId: traceId
+          )
         }
 
         logger.debug(
@@ -177,11 +178,12 @@ public final class IduraVerify: ObservableObject {
         let codeResponse = try await launchBrowser(
           request: parRequest, span: span, useEphemeralBrowserSession: useEphemeralBrowserSession)
 
-        return try await exchanceCode(
+        let jwt = try await exchanceCode(
           codeResponse: codeResponse, span: span, expectedNonce: expectedNonce)
+        return LoginResult(jwt: jwt, traceId: traceId)
+      } catch {
+        throw IduraVerifyError.from(error, traceId: traceId)
       }
-    } catch {
-      throw IduraVerifyError.from(error)
     }
   }
 
@@ -211,7 +213,10 @@ public final class IduraVerify: ObservableObject {
 
   private func exchanceCode(
     codeResponse: OIDAuthorizationResponse, span: any SpanBase, expectedNonce: String
-  ) async throws -> (String, JWT) {
+  ) async throws
+    -> JWT
+  {
+    let traceId = span.context.traceId.hexString
     let tokenResponse = try await tracer.spanBuilder(spanName: "code exchange").setParent(
       span.context
     ).runWithSpan { _ in
@@ -228,7 +233,7 @@ public final class IduraVerify: ObservableObject {
 
     let idToken = tokenResponse.idToken!
     logger.debug("Got ID Token: \(idToken)")
-    let jwt = try await tracer.spanBuilder(spanName: "JWT verification").setParent(span.context)
+    return try await tracer.spanBuilder(spanName: "JWT verification").setParent(span.context)
       .runWithSpan { _ in
         let claims = try await iduraJwks!.verify(
           idToken,
@@ -243,18 +248,17 @@ public final class IduraVerify: ObservableObject {
           throw IduraVerifyError.internalError(
             message:
               "ID token issuer mismatch (expected \(expectedIssuer), got \(claims.iss.value))",
-            cause: nil)
+            cause: nil, traceId: traceId)
         }
         try claims.aud.verifyIntendedAudience(includes: clientId)
         guard claims.nonce == expectedNonce else {
           throw IduraVerifyError.internalError(
             message: "ID token nonce did not match the value sent in the authorization request",
-            cause: nil)
+            cause: nil, traceId: traceId)
         }
 
         return JWT(idToken: idToken, claims: claims)
       }
-    return (idToken, jwt)
   }
 
   private func pushAuthorizationRequest(
@@ -286,6 +290,7 @@ public final class IduraVerify: ObservableObject {
       throw IduraVerifyError.internalError(
         message: "PAR request failed: \(httpStatus.map(String.init) ?? "non-HTTP response")",
         cause: nil,
+        traceId: span.context.traceId.hexString,
       )
     }
 
