@@ -20,6 +20,18 @@ func mitid_high_prefill() {
 }
 
 @Test
+func builder_does_not_share_state_between_branches() {
+  // Regression test for the value-type conversion: with the previous reference-type
+  // implementation, builder methods returned `self` after mutating in place, so
+  // every "branch" of a chain shared state with earlier references.
+  let base = DanishMitID.substantial().withMessage("hello")
+  let withUuid = base.prefillUUID("abc")
+
+  #expect(base.loginHints == ["message:aGVsbG8="])
+  #expect(withUuid.loginHints == ["message:aGVsbG8=", "uuid:abc"])
+}
+
+@Test
 func other_falback() {
   let acrValue = "urn:grn:authn:foo:bar"
   let other = Other(acrValue: acrValue).withScope("something")
@@ -33,7 +45,7 @@ func other_falback() {
 @Test
 func supportsAppSwitch_typedBuilders() {
   #expect(DanishMitID.substantial().supportsAppSwitch == true)
-  #expect(FrejaID<Any>.basic().supportsAppSwitch == true)
+  #expect(FrejaID.basic().supportsAppSwitch == true)
   #expect(SwedishBankID.sameDevice().supportsAppSwitch == true)
 
   #expect(NorwegianBankID.substantial().supportsAppSwitch == false)

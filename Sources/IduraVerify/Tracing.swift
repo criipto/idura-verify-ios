@@ -54,8 +54,17 @@ func initTelemetry(serverAddress: String, version: String) -> (TracerProvider, T
   return (tracerProvider, propagator)
 }
 
+@MainActor
 extension SpanBuilderBase {
-  public func runWithSpan<T>(_ operation: (any SpanBase) async throws -> T) async rethrows -> T {
+  /// Start the span built by `self`, run `operation` inside it, and end the span when it
+  /// returns or throws. The span's status is set to `.ok` on success and `.error` on
+  /// failure, and any thrown error is recorded as an exception on the span.
+  ///
+  /// `@MainActor` because IduraVerify is main-actor-isolated and the closure body needs
+  /// to capture main-actor state (the SDK's mutable config + the current eID).
+  func runWithSpan<T>(
+    _ operation: @MainActor (any SpanBase) async throws -> T
+  ) async rethrows -> T {
     let createdSpan = self.startSpan()
     defer {
       createdSpan.end()

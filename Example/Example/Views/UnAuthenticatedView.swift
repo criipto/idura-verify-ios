@@ -77,7 +77,7 @@ struct UnAuthenticatedView: View {
     }
   }
 
-  func login<T>(eid: EID<T>) {
+  func login(eid: some EID) {
     Task {
       do {
         loginState = .loading
