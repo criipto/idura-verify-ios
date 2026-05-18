@@ -27,7 +27,8 @@ internal struct URLRequestSetter: Setter {
   }
 }
 
-func initTelemetry(serverAddress: String, version: String) -> (TracerProvider, TextMapPropagator) {
+func initTelemetry(serverAddress: String, version: String) -> (TracerProviderSdk, TextMapPropagator)
+{
   let tracerProvider = TracerProviderBuilder()
     .add(
       spanProcessor: BatchSpanProcessor(

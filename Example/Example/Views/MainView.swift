@@ -4,16 +4,12 @@ import SwiftUI
 
 struct MainView: View {
   @State var loginState = LoginState.notLoggedIn(errorMessage: nil, previouslyLoggedInAs: nil)
-  var iduraVerify: IduraVerify
-
-  init() {
-    iduraVerify = IduraVerify(
-      // swiftlint:disable:next force_cast
-      clientId: Bundle.main.object(forInfoDictionaryKey: "IDURA_CLIENT_ID") as! String,
-      // swiftlint:disable:next force_cast
-      domain: Bundle.main.object(forInfoDictionaryKey: "IDURA_DOMAIN") as! String,
-    )
-  }
+  @StateObject var iduraVerify = IduraVerify(
+    // swiftlint:disable:next force_cast
+    clientId: Bundle.main.object(forInfoDictionaryKey: "IDURA_CLIENT_ID") as! String,
+    // swiftlint:disable:next force_cast
+    domain: Bundle.main.object(forInfoDictionaryKey: "IDURA_DOMAIN") as! String,
+  )
 
   var body: some View {
     VStack {
