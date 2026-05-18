@@ -40,7 +40,10 @@ let package = Package(
     ),
     .testTarget(
       name: "IduraVerifyTests",
-      dependencies: ["IduraVerify"]
+      dependencies: [
+        "IduraVerify",
+        .product(name: "JWTKit", package: "jwt-kit"),
+      ]
     ),
   ],
 )

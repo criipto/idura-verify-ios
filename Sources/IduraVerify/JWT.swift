@@ -3,18 +3,24 @@ import SwiftUI
 
 // This struct is used internally, to extract and validate known claims.
 internal struct IDTokenClaims: JWTPayload {
-  public let sub: String
-  public let aud: String
-  public let iss: String
-  public let identityscheme: String
-  public let exp: ExpirationClaim
-  public let nbf: NotBeforeClaim
-  public let iat: IssuedAtClaim
+  let sub: String
+  let aud: AudienceClaim
+  let iss: IssuerClaim
+  let identityscheme: String
+  let exp: ExpirationClaim
+  let nbf: NotBeforeClaim
+  let iat: IssuedAtClaim
+  let nonce: String
 
-  public func verify(using _: some JWTAlgorithm) throws {
-    let currentDate = Calendar.current.date(byAdding: .minute, value: 5, to: Date())!
-    try exp.verifyNotExpired(currentDate: currentDate)
-    try nbf.verifyNotBefore(currentDate: currentDate)
+  func verify(using _: some JWTAlgorithm) throws {
+    try verifyTimeClaims(at: Date())
+  }
+
+  // Lenient on both sides: a token that just expired is still accepted, and a
+  // token whose nbf is just in the future is also accepted.
+  func verifyTimeClaims(at now: Date, skew: TimeInterval = 5 * 60) throws {
+    try exp.verifyNotExpired(currentDate: now.addingTimeInterval(-skew))
+    try nbf.verifyNotBefore(currentDate: now.addingTimeInterval(skew))
   }
 }
 
@@ -32,8 +38,11 @@ public struct JWT {
   internal init(idToken: String, claims: IDTokenClaims) {
     self.idToken = idToken
     self.subject = claims.sub
-    self.audience = claims.aud
-    self.issuer = claims.iss
+    // OIDC ID tokens for a public client are scoped to a single client. The JWT
+    // spec also permits an audience array, which JWTKit's AudienceClaim decodes
+    // transparently — we surface the first entry here.
+    self.audience = claims.aud.value.first ?? ""
+    self.issuer = claims.iss.value
     self.expireAt = claims.exp.value
     self.notBefore = claims.nbf.value
     self.issuedAt = claims.iat.value
