@@ -9,7 +9,7 @@ import Foundation
 ///
 /// ```swift
 /// do {
-///   let (idToken, jwt) = try await iduraVerify.login(eid: DanishMitID.substantial())
+///   let result = try await iduraVerify.login(eid: DanishMitID.substantial())
 /// } catch IduraVerifyError.userCancelled {
 ///   // User dismissed the browser or the IdP returned `access_denied`. Usually a normal
 ///   // action — quietly return them to the previous screen rather than showing an error.

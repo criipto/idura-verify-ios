@@ -81,8 +81,8 @@ struct UnAuthenticatedView: View {
     Task {
       do {
         loginState = .loading
-        let (idToken, jwt) = try await iduraVerify.login(eid: eid)
-        loginState = .loggedIn(idToken: idToken, jwt: jwt)
+        let result = try await iduraVerify.login(eid: eid)
+        loginState = .loggedIn(idToken: result.jwt.idToken, jwt: result.jwt)
       } catch IduraVerifyError.userCancelled {
         loginState = .notLoggedIn(
           errorMessage: "User cancelled",

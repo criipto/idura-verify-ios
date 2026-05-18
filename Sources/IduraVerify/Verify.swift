@@ -121,7 +121,7 @@ public final class IduraVerify: ObservableObject {
     eid: some EID,
     prompt: Prompt? = .login,
     useEphemeralBrowserSession: Bool? = nil
-  ) async throws -> (String, JWT) {
+  ) async throws -> LoginResult {
     do {
       return try await tracer.spanBuilder(spanName: "ios sdk login").setNoParent().setAttribute(
         key: "acr_value", value: eid.acrValue
@@ -177,8 +177,9 @@ public final class IduraVerify: ObservableObject {
         let codeResponse = try await launchBrowser(
           request: parRequest, span: span, useEphemeralBrowserSession: useEphemeralBrowserSession)
 
-        return try await exchanceCode(
+        let jwt = try await exchanceCode(
           codeResponse: codeResponse, span: span, expectedNonce: expectedNonce)
+        return LoginResult(jwt: jwt)
       }
     } catch {
       throw IduraVerifyError.from(error)
@@ -211,7 +212,9 @@ public final class IduraVerify: ObservableObject {
 
   private func exchanceCode(
     codeResponse: OIDAuthorizationResponse, span: any SpanBase, expectedNonce: String
-  ) async throws -> (String, JWT) {
+  ) async throws
+    -> JWT
+  {
     let tokenResponse = try await tracer.spanBuilder(spanName: "code exchange").setParent(
       span.context
     ).runWithSpan { _ in
@@ -228,7 +231,7 @@ public final class IduraVerify: ObservableObject {
 
     let idToken = tokenResponse.idToken!
     logger.debug("Got ID Token: \(idToken)")
-    let jwt = try await tracer.spanBuilder(spanName: "JWT verification").setParent(span.context)
+    return try await tracer.spanBuilder(spanName: "JWT verification").setParent(span.context)
       .runWithSpan { _ in
         let claims = try await iduraJwks!.verify(
           idToken,
@@ -254,7 +257,6 @@ public final class IduraVerify: ObservableObject {
 
         return JWT(idToken: idToken, claims: claims)
       }
-    return (idToken, jwt)
   }
 
   private func pushAuthorizationRequest(

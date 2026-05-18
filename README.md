@@ -128,14 +128,16 @@ Danish MitID supports a [re-authentication flow](https://docs.criipto.com/verify
 ## Logging in
 
 ```swift
-let (idToken, jwt) = iduraVerify.login(eid: DanishMitID.substantial())
-println(jwt.sub)
+let result = try await iduraVerify.login(eid: DanishMitID.substantial())
+print(result.jwt.sub)
 ```
+
+`login()` returns a `LoginResult`. The verified JWT is on `result.jwt`; the base64 encoded ID token is on `result.jwt.idToken` if you need it.
 
 The SDK provides builder classes for some of the eIDs supported by Idura Verify. You should use these when possible, since they provide helper methods for the scopes and login hints supported by the specific eID provider. For example, Danish MitID supports SSN prefilling, which you can access using the `prefillSsn` method:
 
 ```swift
-val jwt = iduraVerify.login(
+let result = try await iduraVerify.login(
     eid: DanishMitID.substantial().prefillSsn("123456-7890").withMessage("Hello there!"),
 )
 ```
@@ -143,7 +145,7 @@ val jwt = iduraVerify.login(
 The returned JWT class has properties for some common claims such as `subject` and `identityscheme`. For other claims, use the `getClaimValue` function. For example, if you requested the `address` scope, you can access the address like so:
 
 ```swift
-let address = jwt.getClaimValue(key: "address") as? [String: Any]
+let address = result.jwt.getClaimValue(key: "address") as? [String: Any]
 let streetAddress = address?["street_address"]
 ```
 
@@ -155,7 +157,7 @@ let streetAddress = address?["street_address"]
 import IduraVerify
 
 do {
-  let (idToken, jwt) = try await iduraVerify.login(eid: DanishMitID.substantial())
+  let result = try await iduraVerify.login(eid: DanishMitID.substantial())
   // ...
 } catch IduraVerifyError.userCancelled {
   // User dismissed the browser or the IdP returned `access_denied`. Usually a normal
