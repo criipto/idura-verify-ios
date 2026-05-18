@@ -6,7 +6,7 @@ struct AuthenticatedView: View {
   var iduraVerify: IduraVerify
 
   var body: some View {
-    if case .loggedIn(_, var jwt) = loginState {
+    if case .loggedIn(_, let jwt) = loginState {
       VStack {
         Text("Successfully logged in!").font(.largeTitle)
           .padding()
@@ -24,7 +24,7 @@ struct AuthenticatedView: View {
   }
 
   func logout() {
-    guard case .loggedIn(_, var jwt) = loginState
+    guard case .loggedIn(_, let jwt) = loginState
     else {
       return
     }

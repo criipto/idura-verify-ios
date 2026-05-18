@@ -3,18 +3,24 @@ import SwiftUI
 
 // This struct is used internally, to extract and validate known claims.
 internal struct IDTokenClaims: JWTPayload {
-  public let sub: String
-  public let aud: String
-  public let iss: String
-  public let identityscheme: String
-  public let exp: ExpirationClaim
-  public let nbf: NotBeforeClaim
-  public let iat: IssuedAtClaim
+  let sub: String
+  let aud: AudienceClaim
+  let iss: IssuerClaim
+  let identityscheme: String
+  let exp: ExpirationClaim
+  let nbf: NotBeforeClaim
+  let iat: IssuedAtClaim
+  let nonce: String
 
-  public func verify(using _: some JWTAlgorithm) throws {
-    let currentDate = Calendar.current.date(byAdding: .minute, value: 5, to: Date())!
-    try exp.verifyNotExpired(currentDate: currentDate)
-    try nbf.verifyNotBefore(currentDate: currentDate)
+  func verify(using _: some JWTAlgorithm) throws {
+    try verifyTimeClaims(at: Date())
+  }
+
+  // Lenient on both sides: a token that just expired is still accepted, and a
+  // token whose nbf is just in the future is also accepted.
+  func verifyTimeClaims(at now: Date, skew: TimeInterval = 5 * 60) throws {
+    try exp.verifyNotExpired(currentDate: now.addingTimeInterval(-skew))
+    try nbf.verifyNotBefore(currentDate: now.addingTimeInterval(skew))
   }
 }
 
@@ -28,19 +34,21 @@ public struct JWT {
   public let expireAt: Date
   public let notBefore: Date
   public let issuedAt: Date
+  public let dictionary: [String: Any]
 
   internal init(idToken: String, claims: IDTokenClaims) {
     self.idToken = idToken
     self.subject = claims.sub
-    self.audience = claims.aud
-    self.issuer = claims.iss
+    // OIDC ID tokens for a public client are scoped to a single client. The JWT
+    // spec also permits an audience array, which JWTKit's AudienceClaim decodes
+    // transparently — we surface the first entry here.
+    self.audience = claims.aud.value.first ?? ""
+    self.issuer = claims.iss.value
     self.expireAt = claims.exp.value
     self.notBefore = claims.nbf.value
     self.issuedAt = claims.iat.value
     self.identityscheme = claims.identityscheme
-  }
 
-  public lazy var dictionary: [String: Any] = {
     let parser = DefaultJWTParser()
 
     // At this point, we have already extracted the token parts, and parsed the token. We know for
@@ -49,14 +57,12 @@ public struct JWT {
     let (_, encodedPayload, _) = try! parser.getTokenParts([UInt8](idToken.utf8))
     let payloadBytes = encodedPayload.base64URLDecodedBytes()
 
-    let dictionary =
+    self.dictionary =
       try! JSONSerialization.jsonObject(with: Data(payloadBytes), options: []) as! [String: Any]
     // swiftlint:enable force_try force_cast
+  }
 
-    return dictionary
-  }()
-
-  public mutating func getClaimValue(key: String) -> Any? {
+  public func getClaimValue(key: String) -> Any? {
     return dictionary[key]
   }
 }

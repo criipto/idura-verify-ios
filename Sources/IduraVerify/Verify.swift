@@ -162,6 +162,13 @@ public final class IduraVerify: ObservableObject {
           additionalParameters: extraParams,
         )
 
+        // This convenience initializer auto-generates a nonce; we capture it so
+        // we can verify the value round-trips back in the ID token.
+        guard let expectedNonce = authorizationRequest.nonce else {
+          throw IduraVerifyError.internalError(
+            message: "Authorization request was built without a nonce", cause: nil)
+        }
+
         logger.debug(
           "Starting external authentication flow with URL: \(authorizationRequest.authorizationRequestURL())",
         )
@@ -170,7 +177,8 @@ public final class IduraVerify: ObservableObject {
         let codeResponse = try await launchBrowser(
           request: parRequest, span: span, useEphemeralBrowserSession: useEphemeralBrowserSession)
 
-        return try await exchanceCode(codeResponse: codeResponse, span: span)
+        return try await exchanceCode(
+          codeResponse: codeResponse, span: span, expectedNonce: expectedNonce)
       }
     } catch {
       throw IduraVerifyError.from(error)
@@ -201,9 +209,9 @@ public final class IduraVerify: ObservableObject {
       }
   }
 
-  private func exchanceCode(codeResponse: OIDAuthorizationResponse, span: any SpanBase) async throws
-    -> (String, JWT)
-  {
+  private func exchanceCode(
+    codeResponse: OIDAuthorizationResponse, span: any SpanBase, expectedNonce: String
+  ) async throws -> (String, JWT) {
     let tokenResponse = try await tracer.spanBuilder(spanName: "code exchange").setParent(
       span.context
     ).runWithSpan { _ in
@@ -226,6 +234,24 @@ public final class IduraVerify: ObservableObject {
           idToken,
           as: IDTokenClaims.self,
         )
+
+        // JWTKit's verify(using:) handles signature + exp/nbf. The remaining
+        // OIDC checks (iss, aud, nonce) need context the claim struct doesn't
+        // carry, so we do them here.
+        let expectedIssuer = iduraServiceConfiguration!.discoveryDocument!.issuer.absoluteString
+        guard claims.iss.value == expectedIssuer else {
+          throw IduraVerifyError.internalError(
+            message:
+              "ID token issuer mismatch (expected \(expectedIssuer), got \(claims.iss.value))",
+            cause: nil)
+        }
+        try claims.aud.verifyIntendedAudience(includes: clientId)
+        guard claims.nonce == expectedNonce else {
+          throw IduraVerifyError.internalError(
+            message: "ID token nonce did not match the value sent in the authorization request",
+            cause: nil)
+        }
+
         return JWT(idToken: idToken, claims: claims)
       }
     return (idToken, jwt)
