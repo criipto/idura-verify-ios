@@ -56,6 +56,25 @@ public enum IduraVerifyError: Error {
   }
 }
 
+extension IduraVerifyError: LocalizedError {
+  /// Drives `localizedDescription` via Foundation's `NSError` bridge, so consumers logging or
+  /// surfacing the error get a meaningful string instead of the default "The operation couldn't
+  /// be completed. (IduraVerifyError error N.)" placeholder.
+  public var errorDescription: String? {
+    switch self {
+    case .userCancelled:
+      return "The user cancelled the authentication flow."
+    case .oauth(let error, let errorDescription, _):
+      if let errorDescription, !errorDescription.isEmpty {
+        return "OAuth error \"\(error)\": \(errorDescription)"
+      }
+      return "OAuth error \"\(error)\"."
+    case .internalError(let message, _, _):
+      return message
+    }
+  }
+}
+
 extension IduraVerifyError {
   /// Translates an arbitrary error thrown from AppAuth, AuthenticationServices, URLSession,
   /// or JWT verification into the SDK's typed hierarchy. AppAuth's user-cancellation code
