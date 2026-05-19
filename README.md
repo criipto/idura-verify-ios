@@ -175,6 +175,8 @@ do {
 }
 ```
 
+`IduraVerifyError` conforms to [`LocalizedError`](https://developer.apple.com/documentation/foundation/localizederror), so `err.localizedDescription` returns a meaningful string suitable for logging.
+
 # Customization
 
 ## Using a custom callback domain
