@@ -274,7 +274,25 @@ public final class IduraVerify: ObservableObject {
 
     let (data, response) = try await URLSession.shared.data(for: parInitializationRequest)
     let httpStatus = (response as? HTTPURLResponse)?.statusCode
+
+    let decoder = JSONDecoder()
+    decoder.keyDecodingStrategy = .convertFromSnakeCase
+
     if httpStatus != 201 {
+      // Per RFC 9126 §2.3, PAR error responses use the OAuth 2.0 JSON error format.
+      // Surface those as `.oauth` so e.g. a misconfigured redirect_uri produces an
+      // actionable message rather than an opaque internal error.
+      struct ParErrorResponse: Decodable {
+        let error: String
+        let errorDescription: String?
+      }
+      if let parsedError = try? decoder.decode(ParErrorResponse.self, from: data) {
+        throw IduraVerifyError.oauth(
+          error: parsedError.error,
+          errorDescription: parsedError.errorDescription,
+          traceId: span.context.traceId.hexString,
+        )
+      }
       throw IduraVerifyError.internalError(
         message: "PAR request failed: \(httpStatus.map(String.init) ?? "non-HTTP response")",
         cause: nil,
@@ -285,8 +303,6 @@ public final class IduraVerify: ObservableObject {
     struct ParResponse: Decodable {
       let requestUri: String
     }
-    let decoder = JSONDecoder()
-    decoder.keyDecodingStrategy = .convertFromSnakeCase
     let parResponse = try decoder.decode(ParResponse.self, from: data)
 
     var urlBuilder = URLComponents(
