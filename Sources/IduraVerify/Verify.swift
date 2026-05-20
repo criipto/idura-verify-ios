@@ -16,33 +16,6 @@ public enum Prompt: String {
   case consentRevoke = "consent_revoke"
 }
 
-private class PARRequest: OIDAuthorizationRequest, @unchecked Sendable {
-  var parRequestUri: URL?
-  init(request: OIDAuthorizationRequest, parRequestUri: URL) {
-    super.init(
-      configuration: request.configuration,
-      clientId: request.clientID,
-      clientSecret: nil,
-      scope: request.scope,
-      redirectURL: request.redirectURL!,
-      responseType: request.responseType,
-      state: request.state,
-      nonce: request.nonce,
-      codeVerifier: request.codeVerifier,
-      codeChallenge: request.codeChallenge,
-      codeChallengeMethod: request.codeChallengeMethod,
-      additionalParameters: request.additionalParameters,
-    )
-    self.parRequestUri = parRequestUri
-  }
-  required init?(coder: NSCoder) {
-    super.init(coder: coder)
-  }
-  override func externalUserAgentRequestURL() -> URL {
-    return parRequestUri!
-  }
-}
-
 /// Entry point for the Idura Verify SDK. One instance can serve many logins; construct it once
 /// at app startup and hold it for the lifetime of the process.
 ///
@@ -166,12 +139,13 @@ public final class IduraVerify: ObservableObject {
           )
         }
 
-        let parRequest = try await pushAuthorizationRequest(authorizationRequest, span: span)
-        let codeResponse = try await launchBrowser(
-          request: parRequest, span: span, useEphemeralBrowserSession: useEphemeralBrowserSession)
+        let parRequestUrl = try await pushAuthorizationRequest(authorizationRequest, span: span)
+        let callbackUri = try await launchBrowser(
+          url: parRequestUrl, span: span, useEphemeralBrowserSession: useEphemeralBrowserSession)
 
         let jwt = try await exchanceCode(
-          codeResponse: codeResponse, span: span, expectedNonce: expectedNonce)
+          authorizationRequest: authorizationRequest, callbackUri: callbackUri, span: span,
+          expectedNonce: expectedNonce)
         return LoginResult(jwt: jwt, traceId: traceId)
       } catch {
         throw IduraVerifyError.from(error, traceId: traceId)
@@ -180,40 +154,66 @@ public final class IduraVerify: ObservableObject {
   }
 
   private func launchBrowser(
-    request: PARRequest, span: any SpanBase, useEphemeralBrowserSession: Bool?
-  ) async throws -> OIDAuthorizationResponse {
+    url: URL, span: any SpanBase, useEphemeralBrowserSession: Bool?
+  ) async throws -> URL {
     return try await tracer.spanBuilder(spanName: "launch browser").setParent(span.context)
       .runWithSpan { _ in
-        return try await withCheckedThrowingContinuation { continuation in
-          OIDAuthorizationService.present(
-            request,
-            externalUserAgent: ASWebAuthenticationUserAgent(
-              redirectUri: self.redirectUri,
-              useEphemeralBrowserSession: useEphemeralBrowserSession
-                ?? self.useEphemeralBrowserSession,
-            )
-          ) { response, error in
-            if let response {
-              continuation.resume(returning: response)
-            } else if let error {
-              continuation.resume(throwing: error)
-            }
-          }
-        }
+        return try await BrowserManager(
+          redirectUri: self.redirectUri,
+          useEphemeralBrowserSession: useEphemeralBrowserSession ?? self.useEphemeralBrowserSession,
+        )
+        .present(url: url)
       }
   }
 
+  /// Parses a callback URL into a validated `OIDAuthorizationResponse`. Used to translate the
+  /// raw URL handed back by `BrowserManager` into the response object AppAuth's token-exchange
+  /// step expects, while folding the spec-defined failure modes (an `error=` query parameter or
+  /// a mismatched `state`) into the typed error hierarchy.
+  private func parseCallback(
+    callbackUri: URL, authorizationRequest: OIDAuthorizationRequest, traceId: String
+  ) throws -> OIDAuthorizationResponse {
+    guard let query = OIDURLQueryComponent(url: callbackUri) else {
+      throw IduraVerifyError.internalError(
+        message: "Callback URL could not be parsed", cause: nil, traceId: traceId)
+    }
+    if let oauthError = query.dictionaryValue["error"] as? String {
+      let description = query.dictionaryValue["error_description"] as? String
+      if oauthError == "access_denied" {
+        throw IduraVerifyError.userCancelled(traceId: traceId)
+      }
+      throw IduraVerifyError.oauth(
+        error: oauthError, errorDescription: description, traceId: traceId)
+    }
+    let authorizationResponse = OIDAuthorizationResponse(
+      request: authorizationRequest,
+      parameters: query.dictionaryValue)
+    if authorizationRequest.state != authorizationResponse.state {
+      let expected = authorizationRequest.state ?? "nil"
+      let actual = authorizationResponse.state ?? "nil"
+      throw IduraVerifyError.internalError(
+        message: "State parameter mismatch (expected \(expected), got \(actual))",
+        cause: nil, traceId: traceId)
+    }
+    return authorizationResponse
+  }
+
   private func exchanceCode(
-    codeResponse: OIDAuthorizationResponse, span: any SpanBase, expectedNonce: String
-  ) async throws
-    -> JWT
-  {
+    authorizationRequest: OIDAuthorizationRequest, callbackUri: URL, span: any SpanBase,
+    expectedNonce: String
+  ) async throws -> JWT {
     let traceId = span.context.traceId.hexString
+    let authorizationResponse = try parseCallback(
+      callbackUri: callbackUri, authorizationRequest: authorizationRequest, traceId: traceId)
+
     let tokenResponse = try await tracer.spanBuilder(spanName: "code exchange").setParent(
       span.context
     ).runWithSpan { _ in
       return try await withCheckedThrowingContinuation { continuation in
-        OIDAuthorizationService.perform(codeResponse.tokenExchangeRequest()!) { response, error in
+        OIDAuthorizationService.perform(
+          authorizationResponse.tokenExchangeRequest()!,
+          originalAuthorizationResponse: authorizationResponse,
+        ) { response, error in
           if let response {
             continuation.resume(returning: response)
           } else if let error {
@@ -254,10 +254,7 @@ public final class IduraVerify: ObservableObject {
 
   private func pushAuthorizationRequest(
     _ authorizationRequest: OIDAuthorizationRequest, span: any SpanBase
-  )
-    async throws
-    -> PARRequest
-  {
+  ) async throws -> URL {
     let parEndpoint = URL(
       string: iduraServiceConfiguration!.discoveryDocument!.discoveryDictionary[
         // We know the par endpoint will be defined
@@ -298,7 +295,7 @@ public final class IduraVerify: ObservableObject {
       URLQueryItem(name: "client_id", value: clientId),
       URLQueryItem(name: "request_uri", value: parResponse.requestUri),
     ]
-    return PARRequest(request: authorizationRequest, parRequestUri: urlBuilder.url!)
+    return urlBuilder.url!
   }
 
   /// Prepare the login manager by loading Idura OIDC configuration and JWK keyset.

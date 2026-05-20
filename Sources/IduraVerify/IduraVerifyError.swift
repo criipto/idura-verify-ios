@@ -1,4 +1,3 @@
-@preconcurrency internal import AppAuthCore
 internal import AuthenticationServices
 import Foundation
 
@@ -76,11 +75,12 @@ extension IduraVerifyError: LocalizedError {
 }
 
 extension IduraVerifyError {
-  /// Translates an arbitrary error thrown from AppAuth, AuthenticationServices, URLSession,
-  /// or JWT verification into the SDK's typed hierarchy. AppAuth's user-cancellation code
-  /// and `access_denied` OAuth response both fold into ``userCancelled``; other OAuth
-  /// authorization-endpoint errors surface as ``oauth``; anything else is opaque to the
-  /// consumer and surfaces as ``internalError`` with the original error preserved as cause.
+  /// Translates an arbitrary error thrown from AuthenticationServices, URLSession, AppAuth's
+  /// token exchange, or JWT verification into the SDK's typed hierarchy. The browser's
+  /// cancellation signal folds into ``userCancelled``; anything else is opaque to the consumer
+  /// and surfaces as ``internalError`` with the original error preserved as cause. OAuth
+  /// authorization-endpoint errors (including `access_denied`) are parsed off the callback URL
+  /// directly inside ``IduraVerify`` and never reach this helper.
   static func from(_ error: any Error, traceId: String) -> IduraVerifyError {
     if let already = error as? IduraVerifyError {
       return already
@@ -89,22 +89,10 @@ extension IduraVerifyError {
     let nsError = error as NSError
 
     let userCancelled =
-      (nsError.domain == OIDGeneralErrorDomain
-        && nsError.code == OIDErrorCode.userCanceledAuthorizationFlow.rawValue)
-      || (nsError.domain == ASWebAuthenticationSessionErrorDomain
-        && nsError.code == ASWebAuthenticationSessionError.canceledLogin.rawValue)
+      nsError.domain == ASWebAuthenticationSessionErrorDomain
+      && nsError.code == ASWebAuthenticationSessionError.canceledLogin.rawValue
     if userCancelled {
       return .userCancelled(traceId: traceId)
-    }
-
-    if nsError.domain == OIDOAuthAuthorizationErrorDomain {
-      let response = nsError.userInfo[OIDOAuthErrorResponseErrorKey] as? [String: Any]
-      let oauthError = response?[OIDOAuthErrorFieldError] as? String ?? "unknown_error"
-      let oauthDescription = response?[OIDOAuthErrorFieldErrorDescription] as? String
-      if oauthError == "access_denied" {
-        return .userCancelled(traceId: traceId)
-      }
-      return .oauth(error: oauthError, errorDescription: oauthDescription, traceId: traceId)
     }
 
     return .internalError(message: nsError.localizedDescription, cause: error, traceId: traceId)
