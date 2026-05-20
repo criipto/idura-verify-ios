@@ -89,6 +89,12 @@ struct UnAuthenticatedView: View {
           errorMessage: "User cancelled",
           previouslyLoggedInAs: nil,
         )
+      } catch IduraVerifyError.associatedDomainsNotConfigured(let traceId) {
+        loginState = .notLoggedIn(
+          errorMessage:
+            "Associated Domains entitlement missing for the redirect URI host (trace \(traceId))",
+          previouslyLoggedInAs: nil,
+        )
       } catch IduraVerifyError.oauth(let error, let errorDescription, let traceId) {
         loginState = .notLoggedIn(
           errorMessage:
