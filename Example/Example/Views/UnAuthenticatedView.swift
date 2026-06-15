@@ -17,6 +17,7 @@ struct UnAuthenticatedView: View {
           .foregroundStyle(.tint)
         Text(errorMessage ?? "")
           .font(.title)
+          .accessibilityIdentifier("login-error")
         Button(
           // swiftlint:disable:next force_try
           action: { login(eid: try! Mock().withMockData(MockData(name: "Foobar"))) },
@@ -24,6 +25,7 @@ struct UnAuthenticatedView: View {
             Text("Login with Mock")
           },
         ).padding()
+          .accessibilityIdentifier("login-mock")
         Button(
           action: {
             var mitID = DanishMitID.substantial().withMessage("hello there!")
@@ -37,24 +39,28 @@ struct UnAuthenticatedView: View {
             Text("Login with MitID")
           },
         ).padding()
+          .accessibilityIdentifier("login-mitid")
         Button(
           action: { login(eid: SwedishBankID.sameDevice().withMessage("Hello!")) },
           label: {
             Text("Login with SE BankID")
           },
         ).padding()
+          .accessibilityIdentifier("login-se-bankid")
         Button(
           action: { login(eid: NorwegianBankID.high().withSsn()) },
           label: {
             Text("Login with NO BankID")
           },
         ).padding()
+          .accessibilityIdentifier("login-no-bankid")
         Button(
           action: { login(eid: Vipps()) },
           label: {
             Text("Login with Vipps")
           },
         ).padding()
+          .accessibilityIdentifier("login-vipps")
         Button(
           action: {
             login(
@@ -64,6 +70,7 @@ struct UnAuthenticatedView: View {
             Text("Login with FrejaID")
           },
         ).padding()
+          .accessibilityIdentifier("login-frejaid")
         Button(
           action: {
             login(
@@ -73,6 +80,7 @@ struct UnAuthenticatedView: View {
             Text("Age verification (over 15 and 18)")
           },
         ).padding()
+          .accessibilityIdentifier("login-age")
       }.padding()
     }
   }
