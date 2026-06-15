@@ -34,3 +34,34 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]: YES
         INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]: YES
+  ExampleUITests:
+    type: bundle.ui-testing
+    supportedDestinations: [iOS]
+    sources: [ExampleUITests]
+    # Reuse the app's xcconfig so real-device runs inherit DEVELOPMENT_TEAM. The
+    # simulator/CI mock run needs no signing, so an empty config.xxconfig is fine.
+    configFiles:
+      Debug: Configs/config.xxconfig
+    dependencies:
+      - target: Example
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: Example
+        # Automatic signing so `-allowProvisioningUpdates` mints a profile for the new test
+        # bundle id on a device. DEVELOPMENT_TEAM comes from config.xxconfig; the Simulator
+        # (CI) ignores signing entirely.
+        CODE_SIGN_STYLE: Automatic
+schemes:
+  # Declared explicitly (rather than relying on Xcode's auto-generated scheme) so
+  # `xcodebuild test -scheme Example` deterministically runs the UI tests in CI.
+  Example:
+    build:
+      targets:
+        Example: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - ExampleUITests
