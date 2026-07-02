@@ -25,7 +25,7 @@ Then, select the dependency rule and press Add Package.
 ## Using SwiftPM
 
 ```
-swift package add-dependency https://github.com/criipto/idura-verify-ios --from 1.0.0
+swift package add-dependency https://github.com/criipto/idura-verify-ios --from 2.0.1
 ```
 
 # Usage
