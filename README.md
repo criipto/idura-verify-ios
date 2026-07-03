@@ -2,7 +2,7 @@
 
 The Idura Verify iOS SDK allows your users to authenticate with a host of European eID providers. It allows your application to act as a [_public client_](https://docs.idura.app/verify/getting-started/glossary/#public-clients), meaning it does not use a client secret, but instead employs [PKCE](https://docs.idura.app/verify/getting-started/glossary/#pkce-proof-key-for-code-exchange) to ensure that a malicious actor cannot intercept the authorization code.
 
-In addition to the basic OIDC flow, the SDK also supports [app switching](https://docs.idura.app/verify/guides/appswitch/) for the Danish MitID, Swedish BankID, and Swedish FrejaID apps.
+In addition to the basic OIDC flow, the SDK also supports [app switching](https://docs.idura.app/verify/guides/appswitch/).
 
 This project is built using Swift, and targets iOS 17.4 and up. It builds on top of the [AppAuth library](https://github.com/openid/AppAuth-ios), which is maintained by the OpenID foundation. It has been tested on iOS 17.4, 18.6, and 26.
 
