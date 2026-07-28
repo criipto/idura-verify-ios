@@ -104,6 +104,7 @@ public final class IduraVerify: ObservableObject {
         var extraParams = [String: String]()
 
         extraParams["acr_values"] = eid.acrValue
+        extraParams["response_mode"] = "query"
 
         if let prompt {
           extraParams["prompt"] = prompt.rawValue
