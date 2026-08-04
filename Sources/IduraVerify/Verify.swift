@@ -256,63 +256,70 @@ public final class IduraVerify: ObservableObject {
   private func pushAuthorizationRequest(
     _ authorizationRequest: OIDAuthorizationRequest, span: any SpanBase
   ) async throws -> URL {
-    let parEndpoint = URL(
-      string: iduraServiceConfiguration!.discoveryDocument!.discoveryDictionary[
-        // We know the par endpoint will be defined
-        // swiftlint:disable:next force_cast
-        "pushed_authorization_request_endpoint"] as! String)!
+    return try await tracer.spanBuilder(spanName: "push authorize request").setParent(span.context)
+      .runWithSpan { _ in
+        let parEndpoint = URL(
+          string: iduraServiceConfiguration!.discoveryDocument!.discoveryDictionary[
+            // We know the par endpoint will be defined
+            // swiftlint:disable:next force_cast
+            "pushed_authorization_request_endpoint"] as! String)!
 
-    var parInitializationRequest = URLRequest(url: parEndpoint)
-    parInitializationRequest.httpMethod = "POST"
-    parInitializationRequest.httpBody = URLComponents(
-      url: authorizationRequest.authorizationRequestURL(), resolvingAgainstBaseURL: false)?.query?
-      .data(using: .utf8)
+        var parInitializationRequest = URLRequest(url: parEndpoint)
+        parInitializationRequest.httpMethod = "POST"
+        parInitializationRequest.httpBody = URLComponents(
+          url: authorizationRequest.authorizationRequestURL(), resolvingAgainstBaseURL: false)?
+          .query?
+          .data(using: .utf8)
 
-    propagator.inject(
-      spanContext: span.context,
-      carrier: &parInitializationRequest.allHTTPHeaderFields!,
-      setter: URLRequestSetter.instance)
+        // Deliberately propagate the login span rather than the "push authorize request" span:
+        // the server-side span should hang off the login span as a sibling of this one, not be
+        // nested underneath it.
+        propagator.inject(
+          spanContext: span.context,
+          carrier: &parInitializationRequest.allHTTPHeaderFields!,
+          setter: URLRequestSetter.instance)
 
-    let (data, response) = try await URLSession.shared.data(for: parInitializationRequest)
-    let httpStatus = (response as? HTTPURLResponse)?.statusCode
+        let (data, response) = try await URLSession.shared.data(for: parInitializationRequest)
+        let httpStatus = (response as? HTTPURLResponse)?.statusCode
 
-    let decoder = JSONDecoder()
-    decoder.keyDecodingStrategy = .convertFromSnakeCase
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
 
-    if httpStatus != 201 {
-      // Per RFC 9126 §2.3, PAR error responses use the OAuth 2.0 JSON error format.
-      // Surface those as `.oauth` so e.g. a misconfigured redirect_uri produces an
-      // actionable message rather than an opaque internal error.
-      struct ParErrorResponse: Decodable {
-        let error: String
-        let errorDescription: String?
+        if httpStatus != 201 {
+          // Per RFC 9126 §2.3, PAR error responses use the OAuth 2.0 JSON error format.
+          // Surface those as `.oauth` so e.g. a misconfigured redirect_uri produces an
+          // actionable message rather than an opaque internal error.
+          struct ParErrorResponse: Decodable {
+            let error: String
+            let errorDescription: String?
+          }
+          if let parsedError = try? decoder.decode(ParErrorResponse.self, from: data) {
+            throw IduraVerifyError.oauth(
+              error: parsedError.error,
+              errorDescription: parsedError.errorDescription,
+              traceId: span.context.traceId.hexString,
+            )
+          }
+          throw IduraVerifyError.internalError(
+            message: "PAR request failed: \(httpStatus.map(String.init) ?? "non-HTTP response")",
+            cause: nil,
+            traceId: span.context.traceId.hexString,
+          )
+        }
+
+        struct ParResponse: Decodable {
+          let requestUri: String
+        }
+        let parResponse = try decoder.decode(ParResponse.self, from: data)
+
+        var urlBuilder = URLComponents(
+          url: iduraServiceConfiguration!.authorizationEndpoint, resolvingAgainstBaseURL: false)!
+        urlBuilder.queryItems = [
+          URLQueryItem(name: "client_id", value: clientId),
+          URLQueryItem(name: "request_uri", value: parResponse.requestUri),
+        ]
+        return urlBuilder.url!
       }
-      if let parsedError = try? decoder.decode(ParErrorResponse.self, from: data) {
-        throw IduraVerifyError.oauth(
-          error: parsedError.error,
-          errorDescription: parsedError.errorDescription,
-          traceId: span.context.traceId.hexString,
-        )
-      }
-      throw IduraVerifyError.internalError(
-        message: "PAR request failed: \(httpStatus.map(String.init) ?? "non-HTTP response")",
-        cause: nil,
-        traceId: span.context.traceId.hexString,
-      )
-    }
-
-    struct ParResponse: Decodable {
-      let requestUri: String
-    }
-    let parResponse = try decoder.decode(ParResponse.self, from: data)
-
-    var urlBuilder = URLComponents(
-      url: iduraServiceConfiguration!.authorizationEndpoint, resolvingAgainstBaseURL: false)!
-    urlBuilder.queryItems = [
-      URLQueryItem(name: "client_id", value: clientId),
-      URLQueryItem(name: "request_uri", value: parResponse.requestUri),
-    ]
-    return urlBuilder.url!
   }
 
   /// Prepare the login manager by loading Idura OIDC configuration and JWK keyset.
