@@ -1,6 +1,7 @@
 import Foundation
 import OpenTelemetryApi
 import OpenTelemetryConcurrency
+import OpenTelemetryProtocolExporterCommon
 import OpenTelemetryProtocolExporterHttp
 import OpenTelemetrySdk
 import ResourceExtension
@@ -29,11 +30,23 @@ internal struct URLRequestSetter: Setter {
 
 func initTelemetry(serverAddress: String, version: String) -> (TracerProviderSdk, TextMapPropagator)
 {
+  let exportTimeout: TimeInterval = 10
+
+  // `OtlpHttpExporterBase.createRequest` never applies `OtlpConfiguration.timeout` to the
+  // `URLRequest`, so the only way to bound a hung export is at the session level.
+  let sessionConfiguration: URLSessionConfiguration = .ephemeral
+  sessionConfiguration.urlCache = nil
+  sessionConfiguration.timeoutIntervalForRequest = exportTimeout
+
   let tracerProvider = TracerProviderBuilder()
     .add(
       spanProcessor: BatchSpanProcessor(
         spanExporter: OtlpHttpTraceExporter(
-          endpoint: URL(string: "https://telemetry.idura.app/v1/traces")!))
+          endpoint: URL(string: "https://telemetry.idura.app/v1/traces")!,
+          config: OtlpConfiguration(timeout: exportTimeout),
+          httpClient: BaseHTTPClient(
+            session: URLSession(configuration: sessionConfiguration))),
+        exportTimeout: exportTimeout)
     )
     .with(idGenerator: IduraIdGenerator())
     .with(
@@ -54,6 +67,23 @@ func initTelemetry(serverAddress: String, version: String) -> (TracerProviderSdk
   // depends on OTEL, we don't want to pollute the global instance with our trace provider.
   // See https://forums.swift.org/t/swift-package-dependency-managment/70948/7
   return (tracerProvider, propagator)
+}
+
+/// Shut the tracer provider down off the calling thread.
+///
+/// `TracerProviderSdk.shutdown()` drains the batch processor synchronously — it waits on the
+/// worker's operation queue while pending spans are serialised and compressed. It's called from
+/// `IduraVerify.deinit`, which is nonisolated and runs on whichever thread drops the last
+/// reference, so doing that work inline can block the main thread.
+///
+/// `nonisolated(unsafe)` because `TracerProviderSdk` isn't `Sendable`. Safe here because the
+/// caller is being deallocated and hands over its only reference, so nothing else can reach the
+/// provider concurrently.
+func drainTelemetry(_ tracerProvider: TracerProviderSdk) {
+  nonisolated(unsafe) let tracerProvider = tracerProvider
+  DispatchQueue.global(qos: .utility).async {
+    tracerProvider.shutdown()
+  }
 }
 
 @MainActor
