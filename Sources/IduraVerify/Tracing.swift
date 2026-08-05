@@ -68,6 +68,23 @@ func initTelemetry(serverAddress: String, version: String) -> (TracerProviderSdk
   return (tracerProvider, propagator)
 }
 
+/// Shut the tracer provider down off the calling thread.
+///
+/// `TracerProviderSdk.shutdown()` drains the batch processor synchronously — it waits on the
+/// worker's operation queue while pending spans are serialised and compressed. It's called from
+/// `IduraVerify.deinit`, which is nonisolated and runs on whichever thread drops the last
+/// reference, so doing that work inline can block the main thread.
+///
+/// `nonisolated(unsafe)` because `TracerProviderSdk` isn't `Sendable`. Safe here because the
+/// caller is being deallocated and hands over its only reference, so nothing else can reach the
+/// provider concurrently.
+func drainTelemetry(_ tracerProvider: TracerProviderSdk) {
+  nonisolated(unsafe) let tracerProvider = tracerProvider
+  DispatchQueue.global(qos: .utility).async {
+    tracerProvider.shutdown()
+  }
+}
+
 @MainActor
 extension SpanBuilderBase {
   /// Start the span built by `self`, run `operation` inside it, and end the span when it

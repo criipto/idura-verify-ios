@@ -43,7 +43,7 @@ public final class IduraVerify: ObservableObject {
   /// Held only so `deinit` can drain the span exporter; not used elsewhere. Marked
   /// `nonisolated(unsafe)` so the deinit (which is implicitly nonisolated on a `@MainActor`
   /// class) can read it. Safe: the property is a `let`, and `TracerProviderSdk.shutdown()`
-  /// is documented to handle being called at process teardown.
+  /// tolerates being called at process teardown.
   nonisolated(unsafe) private let tracerProvider: TracerProviderSdk
   let tracer: Tracer
   let propagator: TextMapPropagator
@@ -85,7 +85,7 @@ public final class IduraVerify: ObservableObject {
   }
 
   deinit {
-    tracerProvider.shutdown()
+    drainTelemetry(tracerProvider)
   }
 
   public func login(
