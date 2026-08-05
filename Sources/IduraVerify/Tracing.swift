@@ -1,6 +1,7 @@
 import Foundation
 import OpenTelemetryApi
 import OpenTelemetryConcurrency
+import OpenTelemetryProtocolExporterCommon
 import OpenTelemetryProtocolExporterHttp
 import OpenTelemetrySdk
 import ResourceExtension
@@ -29,11 +30,23 @@ internal struct URLRequestSetter: Setter {
 
 func initTelemetry(serverAddress: String, version: String) -> (TracerProviderSdk, TextMapPropagator)
 {
+  let exportTimeout: TimeInterval = 10
+
+  // `OtlpHttpExporterBase.createRequest` never applies `OtlpConfiguration.timeout` to the
+  // `URLRequest`, so the only way to bound a hung export is at the session level.
+  let sessionConfiguration: URLSessionConfiguration = .ephemeral
+  sessionConfiguration.urlCache = nil
+  sessionConfiguration.timeoutIntervalForRequest = exportTimeout
+
   let tracerProvider = TracerProviderBuilder()
     .add(
       spanProcessor: BatchSpanProcessor(
         spanExporter: OtlpHttpTraceExporter(
-          endpoint: URL(string: "https://telemetry.idura.app/v1/traces")!))
+          endpoint: URL(string: "https://telemetry.idura.app/v1/traces")!,
+          config: OtlpConfiguration(timeout: exportTimeout),
+          httpClient: BaseHTTPClient(
+            session: URLSession(configuration: sessionConfiguration))),
+        exportTimeout: exportTimeout)
     )
     .with(idGenerator: IduraIdGenerator())
     .with(
