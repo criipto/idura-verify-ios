@@ -93,17 +93,19 @@ IDURA_DOMAIN = urn:my:application:identifier:XXXX
 You can then instantiate the SDK like this:
 
 ```swift
-let iduraVerify = IduraVerify(
+let iduraVerify = try IduraVerify(
     clientId: Bundle.main.object(forInfoDictionaryKey: "IDURA_CLIENT_ID") as! String,
     domain: Bundle.main.object(forInfoDictionaryKey: "IDURA_DOMAIN") as! String,
 )
 ```
 
+The initializer throws `IduraVerifyConfigurationError.invalidDomain` if `domain` is not a bare hostname — a scheme, a path or a stray space (easily introduced when the value travels through an xcconfig) is rejected rather than quietly repaired, because the same value has to work in your entitlements. Surrounding whitespace is trimmed.
+
 `IduraVerify` is stateful — it caches the OIDC discovery document and JWKS and runs a telemetry exporter. Construct one instance and hold it for the lifetime of the app. In SwiftUI, store it with `@StateObject` (or inject via `@Environment`) so the instance survives view rebuilds:
 
 ```swift
 struct MainView: View {
-    @StateObject private var iduraVerify = IduraVerify(
+    @StateObject private var iduraVerify = try! IduraVerify(
         clientId: Bundle.main.object(forInfoDictionaryKey: "IDURA_CLIENT_ID") as! String,
         domain: Bundle.main.object(forInfoDictionaryKey: "IDURA_DOMAIN") as! String,
     )
@@ -111,6 +113,8 @@ struct MainView: View {
     var body: some View { /* ... */ }
 }
 ```
+
+`try!` is deliberate here: a malformed domain is a build-configuration mistake, so it fails on your own first run rather than in production. Construct the instance further up the view hierarchy if you would rather handle the error.
 
 ### Ephemeral sessions
 
@@ -191,7 +195,7 @@ If you want to a different callback URL you can pass it when initializing the SD
 
 ```swift
 let domain = Bundle.main.object(forInfoDictionaryKey: "IDURA_DOMAIN") as! String
-let iduraVerify = IduraVerify(
+let iduraVerify = try IduraVerify(
   clientId: Bundle.main.object(forInfoDictionaryKey: "IDURA_CLIENT_ID") as! String,
   domain: domain,
   redirectUri: URL(string: "https://" + domain)!.appendingPathComponent("/my/custom/callback")

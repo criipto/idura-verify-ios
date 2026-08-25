@@ -4,7 +4,9 @@ import SwiftUI
 
 struct MainView: View {
   @State var loginState = LoginState.notLoggedIn(errorMessage: nil, previouslyLoggedInAs: nil)
-  @StateObject var iduraVerify = IduraVerify(
+  // `try!`: a malformed IDURA_DOMAIN is a misconfigured build, so failing fast is what we want.
+  // swiftlint:disable:next force_try
+  @StateObject var iduraVerify = try! IduraVerify(
     // swiftlint:disable:next force_cast
     clientId: Bundle.main.object(forInfoDictionaryKey: "IDURA_CLIENT_ID") as! String,
     // swiftlint:disable:next force_cast
