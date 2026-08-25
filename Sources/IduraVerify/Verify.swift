@@ -31,10 +31,14 @@ public enum Prompt: String {
 ///
 /// ```swift
 /// struct MainView: View {
-///   @StateObject private var iduraVerify = IduraVerify(clientId: ..., domain: ...)
+///   @StateObject private var iduraVerify = try! IduraVerify(clientId: ..., domain: ...)
 ///   var body: some View { ... }
 /// }
 /// ```
+///
+/// The initializer only throws when `domain` is malformed, which is a build-configuration mistake
+/// rather than a runtime condition — `try!` fails fast on the developer's own first run. Construct
+/// the instance further up and handle the error if you would rather surface it.
 ///
 /// Do *not* assign `IduraVerify(...)` to a plain stored property of a `View` — every state
 /// change recomputes the view and would build a new instance.
@@ -59,17 +63,27 @@ public final class IduraVerify: ObservableObject {
   let redirectUri: URL
   let useEphemeralBrowserSession: Bool
 
+  /// - Parameter domain: Your Idura domain as a bare hostname, e.g. `your-tenant.criipto.id` —
+  ///   no scheme, no path. The same value belongs in the app's Associated Domains entitlement.
+  /// - Throws: ``IduraVerifyConfigurationError/invalidDomain(message:)`` if `domain` is not a
+  ///   bare hostname. Surrounding whitespace is trimmed first, since the value usually arrives
+  ///   from `Info.plist`.
   public init(
     clientId: String, domain: String, redirectUri: URL? = nil,
     useEphemeralBrowserSession: Bool? = nil,
-  ) {
-    let (tracerProvider, propagator) = initTelemetry(serverAddress: domain, version: version)
+  ) throws {
+    // Validated before telemetry starts: an instance with an unusable domain can never log in,
+    // so there is no point standing up a span exporter for it.
+    self.domain = try iduraDomainURL(domain)
+
+    let (tracerProvider, propagator) = initTelemetry(
+      // Force-unwrapped: `iduraDomainURL` rejects a domain without a host.
+      serverAddress: self.domain.host()!, version: version)
     self.tracerProvider = tracerProvider
     self.propagator = propagator
     tracer = tracerProvider.get(
       instrumentationName: "idura-verify", instrumentationVersion: version)
 
-    self.domain = URL(string: "https://" + domain)!
     self.redirectUri = redirectUri ?? self.domain.appendingPathComponent("/ios/callback")
     self.clientId = clientId
     self.useEphemeralBrowserSession = useEphemeralBrowserSession ?? true
