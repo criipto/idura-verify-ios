@@ -7,7 +7,7 @@ import JWTKit
 import OpenTelemetryConcurrency
 import OpenTelemetrySdk
 
-private let version = "2.0.2"
+private let version = "3.0.0"
 
 public enum Prompt: String {
   case login = "login"
