@@ -4,14 +4,10 @@ import Foundation
 /// AppAuth reports transport failures as `OIDErrorCodeNetworkError` with the URLSession error
 /// under `NSUnderlyingErrorKey`, so the top-level code alone never matches.
 func isConnectionLost(_ error: any Error) -> Bool {
-  var current: NSError? = error as NSError
-  while let nsError = current {
-    if nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorNetworkConnectionLost {
-      return true
-    }
-    current = nsError.userInfo[NSUnderlyingErrorKey] as? NSError
+  errorChain(error).contains { error in
+    let nsError = error as NSError
+    return nsError.domain == NSURLErrorDomain && nsError.code == NSURLErrorNetworkConnectionLost
   }
-  return false
 }
 
 /// Runs `operation`, and runs it once more if the first attempt fails with a lost connection.

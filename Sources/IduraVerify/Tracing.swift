@@ -86,6 +86,27 @@ func drainTelemetry(_ tracerProvider: TracerProviderSdk) {
   }
 }
 
+/// Lets `runWithSpan` choose `exception.type`. OTel's `NSError` adapter reports the bare code,
+/// which for a Swift enum is just the case index, and writes it over any `exception.type` passed
+/// in as an attribute.
+private struct RecordedException: SpanException {
+  let type: String
+  let message: String?
+  let stackTrace: [String]? = nil
+}
+
+/// Attributes for the exception event that identify the innermost error, i.e. the one that
+/// actually went wrong, e.g. `NSURLErrorDomain` -1005 underneath AppAuth's generic network error.
+func exceptionAttributes(_ error: any Error) -> [String: AttributeValue] {
+  let chain = errorChain(error)
+  let innermost = chain.last! as NSError
+  return [
+    "idura.error.domain": .string(innermost.domain),
+    "idura.error.code": .int(innermost.code),
+    "idura.error.chain": .string(chain.map(errorTypeName).joined(separator: " → ")),
+  ]
+}
+
 @MainActor
 extension SpanBuilderBase {
   /// Start the span built by `self`, run `operation` inside it, and end the span when it
@@ -108,7 +129,9 @@ extension SpanBuilderBase {
       return result
     } catch {
       createdSpan.status = .error(description: error.localizedDescription)
-      createdSpan.recordException(error)
+      createdSpan.recordException(
+        RecordedException(type: errorTypeName(error), message: error.localizedDescription),
+        attributes: exceptionAttributes(error))
       throw error
     }
   }

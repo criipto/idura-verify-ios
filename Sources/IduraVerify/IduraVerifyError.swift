@@ -62,6 +62,46 @@ public enum IduraVerifyError: Error {
     case .internalError(_, _, let traceId): return traceId
     }
   }
+
+  /// The case name, for telemetry. Unlike `localizedDescription` it doesn't depend on the
+  /// device's language.
+  var caseName: String {
+    switch self {
+    case .userCancelled: return "userCancelled"
+    case .associatedDomainsNotConfigured: return "associatedDomainsNotConfigured"
+    case .oauth: return "oauth"
+    case .internalError: return "internalError"
+    }
+  }
+}
+
+extension IduraVerifyError: CustomNSError {
+  /// Exposes the cause of ``internalError(message:cause:traceId:)`` as `NSUnderlyingErrorKey`, so
+  /// code that only sees an `NSError` — telemetry, or a bridge such as the Expo module — can still
+  /// reach e.g. the URLSession error behind a failed token request.
+  public var errorUserInfo: [String: Any] {
+    guard case .internalError(_, let cause?, _) = self else { return [:] }
+    return [NSUnderlyingErrorKey: cause as NSError]
+  }
+}
+
+/// `error` followed by the errors it wraps through `NSUnderlyingErrorKey`, outermost first.
+func errorChain(_ error: any Error) -> [any Error] {
+  var chain: [any Error] = [error]
+  while let underlying = (chain.last! as NSError).userInfo[NSUnderlyingErrorKey] as? NSError {
+    chain.append(underlying)
+  }
+  return chain
+}
+
+/// A name for `error` that is stable across locales: the case for SDK errors, and domain plus
+/// code for everything else.
+func errorTypeName(_ error: any Error) -> String {
+  if let iduraError = error as? IduraVerifyError {
+    return "IduraVerifyError.\(iduraError.caseName)"
+  }
+  let nsError = error as NSError
+  return "\(nsError.domain)(\(nsError.code))"
 }
 
 extension IduraVerifyError: LocalizedError {
