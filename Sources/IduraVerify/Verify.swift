@@ -223,18 +223,14 @@ public final class IduraVerify: ObservableObject {
 
     let tokenResponse = try await tracer.spanBuilder(spanName: "code exchange").setParent(
       span.context
-    ).runWithSpan { _ in
-      return try await withCheckedThrowingContinuation { continuation in
-        OIDAuthorizationService.perform(
-          authorizationResponse.tokenExchangeRequest()!,
-          originalAuthorizationResponse: authorizationResponse,
-        ) { response, error in
-          if let response {
-            continuation.resume(returning: response)
-          } else if let error {
-            continuation.resume(throwing: error)
-          }
-        }
+    ).runWithSpan { codeExchangeSpan in
+      // The user is coming back from an eID app, so the connection this POST reuses may have died
+      // while the app was suspended. A retry can't redeem the code twice: the server either never
+      // saw the first request, or rejects the second with `invalid_grant`.
+      return try await retryingOnceOnConnectionLost {
+        try await self.performTokenRequest(authorizationResponse)
+      } onRetry: { _ in
+        codeExchangeSpan.addEvent(name: "retrying after lost connection")
       }
     }
 
@@ -265,6 +261,23 @@ public final class IduraVerify: ObservableObject {
 
         return JWT(idToken: idToken, claims: claims)
       }
+  }
+
+  private func performTokenRequest(
+    _ authorizationResponse: OIDAuthorizationResponse
+  ) async throws -> OIDTokenResponse {
+    return try await withCheckedThrowingContinuation { continuation in
+      OIDAuthorizationService.perform(
+        authorizationResponse.tokenExchangeRequest()!,
+        originalAuthorizationResponse: authorizationResponse,
+      ) { response, error in
+        if let response {
+          continuation.resume(returning: response)
+        } else if let error {
+          continuation.resume(throwing: error)
+        }
+      }
+    }
   }
 
   private func pushAuthorizationRequest(
