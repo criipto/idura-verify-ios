@@ -54,6 +54,7 @@ func initTelemetry(serverAddress: String, version: String) -> (TracerProviderSdk
         other: Resource(attributes: [
           "service.name": AttributeValue.string("idura-verify-ios"),
           "server.address": AttributeValue.string(serverAddress),
+          "idura.sdk.name": AttributeValue.string("idura-verify-ios"),
           "idura.sdk.version": AttributeValue.string(version),
         ]))
     )
