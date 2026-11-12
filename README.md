@@ -57,11 +57,11 @@ The domain needs to be configured as an [Associated domain](https://developer.ap
 
 The domain must also be passed when initializing the SDK. In order to prevent drift between the value stored in your entitlements and your code, we recommend adding your domain and client ID as config fields, and adding them to your `Info.plist` file:
 
-`config.xxconfig`
+`config.xcconfig`
 
 ```
-IDURA_CLIENT_ID = this-is-an-example.idura.broker
-IDURA_DOMAIN = urn:my:application:identifier:XXXX
+IDURA_CLIENT_ID = urn:my:application:identifier:XXXX
+IDURA_DOMAIN = this-is-an-example.idura.broker
 ```
 
 `Info.plist`
@@ -87,7 +87,6 @@ IDURA_DOMAIN = urn:my:application:identifier:XXXX
 		<string>applinks:$(IDURA_DOMAIN)</string>
 	</array>
 </dict>
-</plist>
 ```
 
 You can then instantiate the SDK like this:
