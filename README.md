@@ -34,28 +34,26 @@ If you prefer a more interactive approach, there is an [example project](https:/
 
 ## Initialization
 
-The SDK needs to be configured with two pieces of information:
-
-- Your Idura domain.
-- Your Idura client ID.
-
 The SDK assumes that:
 
 - You will be using your [Idura domain](https://docs.idura.app/verify/getting-started/glossary/#domain-idura-domain) to host your redirect URL (both custom domains, \*.criipto.id, and \*.idura.broker domains can be used).
 - Your redirect URL will be `https://[YOUR IDURA DOMAIN]/ios/callback`.
 
-You should register the callback URL in the [Idura dashboard](https://dashboard.idura.app). To use your a different domain, or redirect path, see the [Customization section](#customization).
+### Configure your application in the Idura dashboard
 
-The domain needs to be configured as an [Associated domain](https://developer.apple.com/documentation/xcode/configuring-an-associated-domain) in order for redirect and app switch to work. This is a two-way association:
+When a login finishes, the browser opens your redirect URL. iOS hands that URL to your app, only if the domain publishes a file that lists your app and Apple team ID ([Associated domain](https://developer.apple.com/documentation/xcode/supporting-associated-domains)). Idura publishes this file on your Idura domain, based on what you enter in the dashboard. In the [Idura dashboard](https://dashboard.idura.app/applications), open your application and:
 
-1. You should add the following entitlements to your app:
-   ```
-   webcredentials:this-is-an-example.idura.broker # Always required
-   applinks:this-is-an-example.idura.broker # Required for app-switching
-   ```
-2. The domain should host an [Associated Domains Entitlement](https://developer.apple.com/documentation/xcode/supporting-associated-domains) file. When you use your Idura domain, Idura manages this for you, as long as you configure your Apple team ID and the bundle ID of your app in the Idura dashboard.
+1. Add `https://[YOUR IDURA DOMAIN]/ios/callback` as a redirect URL.
+2. In the **Native/Mobile** section, add your Apple Team ID and application bundle ID.
 
-The domain must also be passed when initializing the SDK. In order to prevent drift between the value stored in your entitlements and your code, we recommend adding your domain and client ID as config fields, and adding them to your `Info.plist` file:
+### Add your domain and client ID to the build configuration
+
+The SDK needs to be configured with two pieces of information:
+
+- Your Idura domain, as a bare host name, such as `this-is-an-example.idura.broker`.
+- Your Idura client ID.
+
+In order to prevent drift, we recommend adding your domain and client ID as config fields, and referencing them from configuration and code:
 
 `config.xcconfig`
 
@@ -83,13 +81,13 @@ IDURA_DOMAIN = this-is-an-example.idura.broker
 	<key>com.apple.developer.associated-domains</key>
 	<array>
         <!-- Don't put the actual value here, this is a reference to your config file -->
-		<string>webcredentials:$(IDURA_DOMAIN)</string>
-		<string>applinks:$(IDURA_DOMAIN)</string>
+		<string>webcredentials:$(IDURA_DOMAIN)</string> <!-- Always required -->
+		<string>applinks:$(IDURA_DOMAIN)</string> <!-- Required for app-switching -->
 	</array>
 </dict>
 ```
 
-You can then instantiate the SDK like this:
+### Create the SDK instance
 
 ```swift
 let iduraVerify = try IduraVerify(
@@ -228,8 +226,8 @@ In the default end-to-end flow, the SDK appends the app-switch `login_hint`s aut
 
 When you initialize the OIDC request on your own backend and only use `BrowserManager` to present it, **your backend is responsible for including these hints** in the authorization request it pushes to Idura. If they are missing, the flow still works in the web view, but users will not be switched back from the authenticator app to your app. Add the following `login_hint` values (space-separated, alongside any other hints) when initializing the request:
 
-| eID               | Hints to include                                                      |
-| ----------------- | --------------------------------------------------------------------- |
-| Danish MitID      | `appswitch:ios`, `appswitch:resumeUrl:<your redirectUri>`             |
-| FrejaID           | `appswitch:ios`, `appswitch:resumeUrl:<your redirectUri>`             |
-| Swedish BankID    | `appswitch:resumeUrl:<your redirectUri>`                              |
+| eID            | Hints to include                                          |
+| -------------- | --------------------------------------------------------- |
+| Danish MitID   | `appswitch:ios`, `appswitch:resumeUrl:<your redirectUri>` |
+| FrejaID        | `appswitch:ios`, `appswitch:resumeUrl:<your redirectUri>` |
+| Swedish BankID | `appswitch:resumeUrl:<your redirectUri>`                  |
