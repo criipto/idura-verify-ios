@@ -180,15 +180,15 @@ do {
 
 # Customization
 
-## Using a custom callback domain
+## Using a custom redirect domain
 
 In this context, a _custom_ domain means a domain _not_ hosted by Idura. If you have registered a custom (vanity) domain in the Idura dashboard, and pointed it towards criipto.id / idura.broker, you do not need to do anything else.
 
 If you want to use another domain, you need to host an `apple-app-site-association` file on the domain, as described in the [Apple documentation](https://developer.apple.com/documentation/xcode/supporting-associated-domains).
 
-## Using a custom callback URL
+## Using a custom redirect URL
 
-If you want to a different callback URL you can pass it when initializing the SDK:
+If you want to a different redirect URL you can pass it when initializing the SDK:
 
 ```swift
 let domain = Bundle.main.object(forInfoDictionaryKey: "IDURA_DOMAIN") as! String
@@ -201,9 +201,9 @@ let iduraVerify = try IduraVerify(
 
 ## Presenting the browser yourself (backend-initialized flow)
 
-By default, the SDK handles the entire OIDC flow end-to-end: it builds the authorization request, pushes it to Idura, opens the browser, receives the callback, exchanges the code, and returns the verified JWT on the device.
+By default, the SDK handles the entire OIDC flow end-to-end: it builds the authorization request, pushes it to Idura, opens the browser, receives the redirect, exchanges the code, and returns the verified JWT on the device.
 
-Some applications instead want the authorization request to be initialized by their own backend — for example, when the JWT must stay on the server rather than reaching the device, or in hybrid setups such as Auth0 where the token exchange happens server-side. In that case the SDK does not need to generate the OIDC request at all, but it can still be used to open the browser and receive the callback URL. The `BrowserManager` class is exposed for exactly this purpose:
+Some applications instead want the authorization request to be initialized by their own backend — for example, when the JWT must stay on the server rather than reaching the device, or in hybrid setups such as Auth0 where the token exchange happens server-side. In that case the SDK does not need to generate the OIDC request at all, but it can still be used to open the browser and receive the redirect URL. The `BrowserManager` class is exposed for exactly this purpose:
 
 ```swift
 let browser = try BrowserManager(
@@ -212,13 +212,13 @@ let browser = try BrowserManager(
 )
 
 // `authorizeUrl` is the authorization URL your backend returned after initializing the flow.
-let callbackUrl = try await browser.present(url: authorizeUrl)
+let redirectUrl = try await browser.present(url: authorizeUrl)
 
-// `callbackUrl` contains the OIDC response (code, state, or error). Send it to your backend
+// `redirectUrl` contains the OIDC response (code, state, or error). Send it to your backend
 // to complete the code exchange.
 ```
 
-The same Associated Domain setup described in [Initialization](#initialization) applies: `redirectUri` must be an `https://` URL on a domain configured as an Associated Domain in your app's entitlements, otherwise `ASWebAuthenticationSession` will not match the callback. The initializer throws `BrowserManagerError.configurationError` if `redirectUri` does not use the `https` scheme.
+The same Associated Domain setup described in [Initialization](#initialization) applies: `redirectUri` must be an `https://` URL on a domain configured as an Associated Domain in your app's entitlements, otherwise `ASWebAuthenticationSession` will not match the redirect. The initializer throws `BrowserManagerError.configurationError` if `redirectUri` does not use the `https` scheme.
 
 ### App-switching when using `BrowserManager`
 
