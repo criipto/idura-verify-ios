@@ -30,12 +30,13 @@ public enum IduraVerifyError: Error {
   /// IdP. Usually a normal action, not an error condition.
   case userCancelled(traceId: String)
 
-  /// The app's Associated Domains entitlement is missing or misconfigured for the redirect
-  /// URI's host. `ASWebAuthenticationSession` requires the `webcredentials:<host>` service
-  /// type to be present in the app's entitlements when using HTTPS callbacks; without it the
-  /// session fails immediately with a message of the form "Application with identifier ... is
-  /// not associated with domain ...". This is a developer configuration issue, not a user
-  /// action — see the README's "Associated Domains" section.
+  /// iOS could not verify the association between the app and the redirect URI's host, so
+  /// `ASWebAuthenticationSession` refuses the HTTPS callback. Either the app's entitlements lack
+  /// `webcredentials:<host>`, or the host's apple-app-site-association file does not list the
+  /// app's `<Team ID>.<bundle ID>` under `webcredentials.apps`. iOS reports both the same way.
+  /// For an Idura domain, the second means the team ID or bundle ID registered in the Idura
+  /// dashboard is wrong. This is a developer configuration issue, not a user action — see the
+  /// README's "Associated Domains" section.
   case associatedDomainsNotConfigured(traceId: String)
 
   /// The authorization server returned an OAuth/OIDC error response. The `error` code
@@ -113,10 +114,13 @@ extension IduraVerifyError: LocalizedError {
     case .userCancelled:
       return "The user cancelled the authentication flow."
     case .associatedDomainsNotConfigured:
+      let bundleId = Bundle.main.bundleIdentifier ?? "<bundle ID>"
       return
-        "The app is missing the Associated Domains entitlement for the redirect URI's host. "
-        + "Add a `webcredentials:<host>` entry to the Associated Domains capability and ensure "
-        + "the matching apple-app-site-association file is served from that host."
+        "iOS could not verify that \(bundleId) may receive HTTPS callbacks on the redirect "
+        + "URI's host. The app's entitlements must include `webcredentials:<host>`, and "
+        + "https://<host>/.well-known/apple-app-site-association must list "
+        + "`<Team ID>.\(bundleId)` under `webcredentials.apps`. For an Idura domain, register "
+        + "your Apple team ID and bundle ID in the Idura dashboard."
     case .oauth(let error, let errorDescription, _):
       if let errorDescription, !errorDescription.isEmpty {
         return "OAuth error \"\(error)\": \(errorDescription)"
@@ -142,9 +146,10 @@ extension IduraVerifyError {
 
     let nsError = error as NSError
 
-    // ASWebAuthenticationSession reports a missing/incorrect Associated Domains entitlement
-    // using the same `canceledLogin` code as a real user cancel, distinguishable only by the
-    // localized description ("...is not associated with domain..."). Detect this before the
+    // ASWebAuthenticationSession reports a failed Associated Domains check (missing entitlement
+    // or an apple-app-site-association file that doesn't list the app) using the same
+    // `canceledLogin` code as a real user cancel, distinguishable only by the localized
+    // description ("...is not associated with domain..."). Detect this before the
     // cancel check so consumers can surface it as a configuration issue rather than silently
     // treating it as a normal dismissal.
     if nsError.domain == ASWebAuthenticationSessionErrorDomain
