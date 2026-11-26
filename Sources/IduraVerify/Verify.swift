@@ -172,6 +172,7 @@ public final class IduraVerify: ObservableObject {
     url: URL, span: any SpanBase, useEphemeralBrowserSession: Bool?
   ) async throws -> URL {
     return try await tracer.spanBuilder(spanName: "launch browser").setParent(span.context)
+      .setAttribute(key: "ios.bundle_id", value: Bundle.main.bundleIdentifier ?? "unknown")
       .runWithSpan { _ in
         return try await BrowserManager(
           redirectUri: self.redirectUri,
